@@ -3,11 +3,15 @@ import type { ObjectId } from "./types";
 
 type TransformMode = "translate" | "rotate" | "scale";
 
-type EditorSnapshot = {
+export type EditorSnapshot = {
   enabled: boolean;
   markers: boolean;
   selectedObject: ObjectId;
   mode: TransformMode;
+  hoverTiltX: number;
+  hoverTiltY: number;
+  hoverFollow: number;
+  hoverRange: number;
 };
 
 const settingsKey = "merch-monk-theatre-editor-settings";
@@ -27,6 +31,10 @@ let snapshot: EditorSnapshot = {
   markers: savedSettings.markers ?? false,
   selectedObject: savedSettings.selectedObject ?? "cap",
   mode: savedSettings.mode ?? "translate",
+  hoverTiltX: savedSettings.hoverTiltX ?? 0.28,
+  hoverTiltY: savedSettings.hoverTiltY ?? 0.38,
+  hoverFollow: savedSettings.hoverFollow ?? 0.16,
+  hoverRange: savedSettings.hoverRange ?? 1.25,
 };
 
 const listeners = new Set<() => void>();

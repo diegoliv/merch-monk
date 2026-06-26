@@ -4,9 +4,11 @@ import { FeatureSection, FinalCtaSection, SplitStatementSection } from "./compon
 import { GlobalSceneCanvas } from "./three/GlobalSceneCanvas";
 import { SceneEditor } from "./three/SceneEditor";
 import { useEditorStore } from "./three/editorStore";
+import { useLenisSmoothScroll } from "./useLenisSmoothScroll";
 
 export default function App() {
   const editor = useEditorStore();
+  useLenisSmoothScroll();
 
   return (
     <>

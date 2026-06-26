@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, OrthographicCamera, TransformControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
@@ -80,34 +80,108 @@ type MerchObjectProps = {
   state: AppliedSceneState[ObjectId];
   selected: boolean;
   editorEnabled: boolean;
+  hoverTiltX: number;
+  hoverTiltY: number;
+  hoverFollow: number;
+  hoverRange: number;
   setSelectedRef: (instance: THREE.Group | null) => void;
 };
 
-function MerchObject({ id, state, selected, editorEnabled, setSelectedRef }: MerchObjectProps) {
+function MerchObject({ id, state, selected, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, setSelectedRef }: MerchObjectProps) {
   const { scene } = useGLTF(modelPath);
+  const { camera, size } = useThree();
   const groupRef = useRef<THREE.Group | null>(null);
+  const pointerRef = useRef(new THREE.Vector2());
+  const pointerActiveRef = useRef(false);
+  const raycasterRef = useRef(new THREE.Raycaster());
+  const tiltRef = useRef(new THREE.Vector2());
+  const targetTiltRef = useRef(new THREE.Vector2());
+  const baseEulerRef = useRef(new THREE.Euler());
+  const baseQuaternionRef = useRef(new THREE.Quaternion());
+  const globalTiltEulerRef = useRef(new THREE.Euler());
+  const globalTiltQuaternionRef = useRef(new THREE.Quaternion());
+  const boxRef = useRef(new THREE.Box3());
+  const centerRef = useRef(new THREE.Vector3());
   const object = useMemo(() => {
     const node = scene.getObjectByName(id);
     return node ? cloneNode(node) : null;
   }, [id, scene]);
 
-  function applyState(float = 0) {
+  function applyState(float = 0, tilt = tiltRef.current) {
     if (!groupRef.current) return;
     groupRef.current.position.set(state.worldPosition[0], state.worldPosition[1] + float, state.worldPosition[2]);
-    groupRef.current.rotation.set(state.rotation[0], state.rotation[1], state.rotation[2]);
+    baseEulerRef.current.set(state.rotation[0], state.rotation[1], state.rotation[2], "XYZ");
+    baseQuaternionRef.current.setFromEuler(baseEulerRef.current);
+    globalTiltEulerRef.current.set(tilt.x, tilt.y, 0, "XYZ");
+    globalTiltQuaternionRef.current.setFromEuler(globalTiltEulerRef.current);
+    groupRef.current.quaternion.copy(baseQuaternionRef.current).premultiply(globalTiltQuaternionRef.current);
     groupRef.current.scale.setScalar(state.scale);
     groupRef.current.visible = state.visible && state.opacity > 0.01;
     if (object) setOpacity(object, state.opacity);
   }
 
   useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      pointerRef.current.set((event.clientX / size.width) * 2 - 1, -(event.clientY / size.height) * 2 + 1);
+      pointerActiveRef.current = true;
+    }
+
+    function handlePointerLeave() {
+      pointerActiveRef.current = false;
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    window.addEventListener("pointerleave", handlePointerLeave);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerleave", handlePointerLeave);
+    };
+  }, [size.height, size.width]);
+
+  useEffect(() => {
     applyState(0);
   }, [state.worldPosition[0], state.worldPosition[1], state.worldPosition[2], state.rotation[0], state.rotation[1], state.rotation[2], state.scale, state.opacity, state.visible]);
 
   useFrame(({ clock }) => {
+    if (selected) {
+      tiltRef.current.lerp(targetTiltRef.current.set(0, 0), 0.18);
+      applyState(0, tiltRef.current);
+      return;
+    }
+
     const phase = objectIds.indexOf(id) * 0.45;
-    const float = selected ? 0 : Math.sin(clock.elapsedTime * 0.55 + phase) * 0.045;
-    if (!selected) applyState(float);
+    const float = Math.sin(clock.elapsedTime * 0.55 + phase) * 0.045;
+    applyState(float);
+
+    if (!groupRef.current || !object || !state.visible || state.opacity <= 0.08 || !pointerActiveRef.current) {
+      targetTiltRef.current.set(0, 0);
+    } else {
+      groupRef.current.updateMatrixWorld();
+      raycasterRef.current.setFromCamera(pointerRef.current, camera);
+
+      const isPointerOverObject = raycasterRef.current.intersectObject(groupRef.current, true).length > 0;
+      if (isPointerOverObject) {
+        targetTiltRef.current.set(0, 0);
+      } else {
+        boxRef.current.setFromObject(groupRef.current);
+        boxRef.current.getCenter(centerRef.current).project(camera);
+
+        const horizontal = pointerRef.current.x - centerRef.current.x;
+        const vertical = pointerRef.current.y - centerRef.current.y;
+        const distance = Math.hypot(horizontal, vertical);
+        const influence = THREE.MathUtils.clamp(distance / hoverRange, 0, 1);
+
+        if (distance < 0.001) {
+          targetTiltRef.current.set(0, 0);
+        } else {
+          targetTiltRef.current.set((-vertical / distance) * influence * hoverTiltX, (horizontal / distance) * influence * hoverTiltY);
+        }
+      }
+    }
+
+    tiltRef.current.lerp(targetTiltRef.current, hoverFollow);
+    applyState(float, tiltRef.current);
   });
 
   if (!object) return null;
@@ -192,6 +266,10 @@ function SceneContent() {
           state={applied[id]}
           selected={editor.enabled && editor.selectedObject === id}
           editorEnabled={editor.enabled}
+          hoverTiltX={editor.hoverTiltX}
+          hoverTiltY={editor.hoverTiltY}
+          hoverFollow={editor.hoverFollow}
+          hoverRange={editor.hoverRange}
           setSelectedRef={(instance) => {
             if (editor.selectedObject === id) setSelectedObject(instance);
           }}
