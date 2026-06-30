@@ -10,10 +10,11 @@ import { getTheatreObject, theatreObjects, type TheatreObjectValue, valueToScene
 import { selectTheatreObject, setTheatreObjectValue } from "./theatreStudio";
 import { useSceneProgress } from "./useSceneProgress";
 import { useViewportInfo } from "./useViewportInfo";
+import type { ProductCupColor } from "../components/StorySections";
 import type { AppliedSceneState, BoxChildObjectId, ObjectId } from "./types";
 
 const modelPath = "/models/merch_monk_website.glb";
-const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones" };
+const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones", product_cup: "cup" };
 const boxAnimationNames = new Set(["box_open"]);
 
 type TheatreValues = Record<ObjectId, TheatreObjectValue>;
@@ -144,6 +145,27 @@ function setOpacity(object: THREE.Object3D, opacity: number) {
   });
 }
 
+function applyProductCupMaterial(object: THREE.Object3D, productCupColor: ProductCupColor) {
+  object.traverse((child) => {
+    if (!("material" in child)) return;
+    const mesh = child as THREE.Mesh;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+
+    materials.forEach((material) => {
+      if (!material || !("color" in material)) return;
+      const pbr = material as THREE.MeshStandardMaterial;
+      const name = material.name.toLowerCase().replace(/[_\s]/g, ".");
+      if (name.includes("orange.dark")) {
+        pbr.color.set(productCupColor.darkColor);
+      } else if (name.includes("orange") || name.includes("cup.uv")) {
+        pbr.color.set(productCupColor.color);
+      }
+      if ("roughness" in pbr) pbr.roughness = Math.max(pbr.roughness ?? 0, 0.62);
+      if ("metalness" in pbr) pbr.metalness = Math.min(pbr.metalness ?? 0, 0.08);
+      material.needsUpdate = true;
+    });
+  });
+}
 function applyBoxChildStates(root: THREE.Object3D, childValues: BoxChildValues, restTransforms: Partial<Record<BoxChildObjectId, RestTransform>>, parentOpacity: number) {
   boxChildObjectIds.forEach((childId) => {
     const target = root.getObjectByName(childId);
@@ -185,10 +207,11 @@ type MerchObjectProps = {
   hoverRange: number;
   animationProgress: number;
   childValues: BoxChildValues;
+  productCupColor: ProductCupColor;
   setSelectedRef: (instance: THREE.Object3D | null) => void;
 };
 
-function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, animationProgress, childValues, setSelectedRef }: MerchObjectProps) {
+function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, animationProgress, childValues, productCupColor, setSelectedRef }: MerchObjectProps) {
   const { scene, animations } = useGLTF(modelPath);
   const { camera, size } = useThree();
   const groupRef = useRef<THREE.Group | null>(null);
@@ -226,6 +249,10 @@ function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editor
       return transforms;
     }, {} as Partial<Record<BoxChildObjectId, RestTransform>>);
   }, [id, object]);
+  useEffect(() => {
+    if (id !== "product_cup" || !object) return;
+    applyProductCupMaterial(object, productCupColor);
+  }, [id, object, productCupColor]);
 
   function applyState(float = 0, tilt = tiltRef.current) {
     if (!groupRef.current) return;
@@ -385,7 +412,11 @@ function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editor
   );
 }
 
-function SceneContent() {
+type SceneContentProps = {
+  productCupColor: ProductCupColor;
+};
+
+function SceneContent({ productCupColor }: SceneContentProps) {
   useSceneProgress();
   const viewport = useViewportInfo();
   const editor = useEditorStore();
@@ -487,6 +518,7 @@ function SceneContent() {
           hoverRange={editor.hoverRange}
           animationProgress={theatreValues[id].boxAnimationProgress ?? 0}
           childValues={boxChildValues}
+          productCupColor={productCupColor}
           setSelectedRef={setSelectedObject}
         />
       ))}
@@ -497,7 +529,11 @@ function SceneContent() {
   );
 }
 
-export function GlobalSceneCanvas() {
+type GlobalSceneCanvasProps = {
+  productCupColor: ProductCupColor;
+};
+
+export function GlobalSceneCanvas({ productCupColor }: GlobalSceneCanvasProps) {
   const editor = useEditorStore();
 
   return (
@@ -512,7 +548,7 @@ export function GlobalSceneCanvas() {
         }}
       >
         <Suspense fallback={null}>
-          <SceneContent />
+          <SceneContent productCupColor={productCupColor} />
         </Suspense>
       </Canvas>
     </div>

@@ -10,6 +10,7 @@ export type ObjectId =
   | "notebook"
   | "cap"
   | "box"
+  | "product_cup"
   | BoxChildObjectId
   | "flip_flop"
   | "crewneck"

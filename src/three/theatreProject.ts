@@ -19,7 +19,18 @@ export const theatreSequenceLength = sceneTimeline.length;
 export const theatreProject = getProject(theatreProjectId);
 export const theatreSheet = theatreProject.sheet("Scroll Scene");
 
-function theatreDefaults(): TheatreObjectValue {
+function theatreDefaults(id?: ObjectId): TheatreObjectValue {
+  if (id === "product_cup") {
+    return {
+      anchor: { x: 0.58, y: 0.56 },
+      position: { x: 0, y: 0, z: 0.35 },
+      rotation: { x: 0.08, y: -0.18, z: 0 },
+      scale: 1.45,
+      opacity: 1,
+      visible: true,
+    };
+  }
+
   return {
     anchor: { x: 0.5, y: 0.5 },
     position: { x: 0, y: 0, z: 0 },
@@ -35,7 +46,7 @@ function theatreObjectName(id: ObjectId) {
 }
 
 function createTheatreObject(id: ObjectId) {
-  const defaults = theatreDefaults();
+  const defaults = theatreDefaults(id);
 
   const config = {
     anchor: {
