@@ -1,5 +1,7 @@
 export type Breakpoint = "mobile" | "tablet" | "desktop";
 
+export type BoxChildObjectId = "cap_box" | "cup_box" | "notebook_box";
+
 export type ObjectId =
   | "tote"
   | "cup"
@@ -7,6 +9,8 @@ export type ObjectId =
   | "umbrela_closed"
   | "notebook"
   | "cap"
+  | "box"
+  | BoxChildObjectId
   | "flip_flop"
   | "crewneck"
   | "sweatpant";

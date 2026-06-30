@@ -1,6 +1,6 @@
 import { getProject, types } from "@theatre/core";
 import type { ISheetObject } from "@theatre/core";
-import { objectIds } from "./sceneObjects";
+import { boxChildObjectIds, objectIds } from "./sceneObjects";
 import { sceneTimeline } from "./sceneTimeline";
 import type { ObjectId } from "./types";
 
@@ -11,6 +11,7 @@ export type TheatreObjectValue = {
   scale: number;
   opacity: number;
   visible: boolean;
+  boxAnimationProgress?: number;
 };
 
 export const theatreProjectId = "Merch Monk Scene Neutral";
@@ -29,10 +30,14 @@ function theatreDefaults(): TheatreObjectValue {
   };
 }
 
+function theatreObjectName(id: ObjectId) {
+  return boxChildObjectIds.includes(id as (typeof boxChildObjectIds)[number]) ? `box/${id}` : id;
+}
+
 function createTheatreObject(id: ObjectId) {
   const defaults = theatreDefaults();
 
-  return theatreSheet.object(id, {
+  const config = {
     anchor: {
       x: types.number(defaults.anchor.x, { range: [-2, 3] }),
       y: types.number(defaults.anchor.y, { range: [-2, 3] }),
@@ -47,10 +52,13 @@ function createTheatreObject(id: ObjectId) {
       y: types.number(defaults.rotation.y, { range: [-Math.PI, Math.PI] }),
       z: types.number(defaults.rotation.z, { range: [-Math.PI, Math.PI] }),
     },
-    scale: types.number(defaults.scale, { range: [0, 3] }),
+    scale: types.number(defaults.scale, { range: [0, 10] }),
     opacity: types.number(defaults.opacity, { range: [0, 1] }),
     visible: defaults.visible,
-  }) as ISheetObject<typeof defaults>;
+    ...(id === "box" ? { boxAnimationProgress: types.number(0, { range: [0, 1] }) } : {}),
+  };
+
+  return theatreSheet.object(theatreObjectName(id), config) as ISheetObject<TheatreObjectValue>;
 }
 
 export const theatreObjects = Object.fromEntries(
