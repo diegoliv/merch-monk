@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ViewportInfo } from "./types";
-import { getBreakpoint, getWorldSize } from "./math";
+import { getBreakpoint } from "./breakpoints";
+import { getWorldSize } from "./math";
 
 function readViewport(): ViewportInfo {
   const width = window.innerWidth;
