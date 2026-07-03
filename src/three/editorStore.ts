@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { BreakpointMode } from "./breakpoints";
 import type { ObjectId } from "./types";
 
 type TransformMode = "translate" | "rotate" | "scale";
@@ -12,6 +13,7 @@ export type EditorSnapshot = {
   hoverTiltY: number;
   hoverFollow: number;
   hoverRange: number;
+  breakpointMode: BreakpointMode;
 };
 
 const settingsKey = "merch-monk-theatre-editor-settings";
@@ -35,6 +37,7 @@ let snapshot: EditorSnapshot = {
   hoverTiltY: savedSettings.hoverTiltY ?? 0.38,
   hoverFollow: savedSettings.hoverFollow ?? 0.16,
   hoverRange: savedSettings.hoverRange ?? 1.25,
+  breakpointMode: savedSettings.breakpointMode ?? "auto",
 };
 
 const listeners = new Set<() => void>();

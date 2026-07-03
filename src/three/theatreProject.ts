@@ -1,8 +1,9 @@
 import { getProject, types } from "@theatre/core";
 import type { ISheetObject } from "@theatre/core";
+import { breakpoints } from "./breakpoints";
 import { boxChildObjectIds, objectIds } from "./sceneObjects";
 import { sceneTimeline } from "./sceneTimeline";
-import type { ObjectId } from "./types";
+import type { Breakpoint, ObjectId } from "./types";
 
 export type TheatreObjectValue = {
   anchor: { x: number; y: number };
@@ -17,7 +18,13 @@ export type TheatreObjectValue = {
 export const theatreProjectId = "Merch Monk Scene Neutral";
 export const theatreSequenceLength = sceneTimeline.length;
 export const theatreProject = getProject(theatreProjectId);
-export const theatreSheet = theatreProject.sheet("Scroll Scene");
+export const theatreSheets = Object.fromEntries(
+  breakpoints.map((breakpoint) => [
+    breakpoint,
+    theatreProject.sheet(breakpoint === "desktop" ? "Scroll Scene" : `Scroll Scene / ${breakpoint}`),
+  ]),
+) as Record<Breakpoint, ReturnType<typeof theatreProject.sheet>>;
+export const theatreSheet = theatreSheets.desktop;
 
 function theatreDefaults(id?: ObjectId): TheatreObjectValue {
   if (id === "product_cup") {
@@ -45,7 +52,7 @@ function theatreObjectName(id: ObjectId) {
   return boxChildObjectIds.includes(id as (typeof boxChildObjectIds)[number]) ? `box/${id}` : id;
 }
 
-function createTheatreObject(id: ObjectId) {
+function createTheatreObject(id: ObjectId, sheet = theatreSheet) {
   const defaults = theatreDefaults(id);
 
   const config = {
@@ -69,15 +76,66 @@ function createTheatreObject(id: ObjectId) {
     ...(id === "box" ? { boxAnimationProgress: types.number(0, { range: [0, 1] }) } : {}),
   };
 
-  return theatreSheet.object(theatreObjectName(id), config) as ISheetObject<TheatreObjectValue>;
+  return sheet.object(theatreObjectName(id), config) as ISheetObject<TheatreObjectValue>;
 }
 
-export const theatreObjects = Object.fromEntries(
-  objectIds.map((id) => [id, createTheatreObject(id)]),
-) as Record<ObjectId, ISheetObject<TheatreObjectValue>>;
+function createTheatreObjectsForBreakpoint(breakpoint: Breakpoint) {
+  const sheet = theatreSheets[breakpoint];
 
-export function getTheatreObject(id: ObjectId) {
-  return theatreObjects[id];
+  return Object.fromEntries(
+    objectIds.map((id) => [id, createTheatreObject(id, sheet)]),
+  ) as Record<ObjectId, ISheetObject<TheatreObjectValue>>;
+}
+
+export const theatreObjectsByBreakpoint = Object.fromEntries(
+  breakpoints.map((breakpoint) => [breakpoint, createTheatreObjectsForBreakpoint(breakpoint)]),
+) as Record<Breakpoint, Record<ObjectId, ISheetObject<TheatreObjectValue>>>;
+
+export const theatreObjects = theatreObjectsByBreakpoint.desktop;
+
+export function getTheatreSheet(breakpoint: Breakpoint) {
+  return theatreSheets[breakpoint];
+}
+
+export function getTheatreObjects(breakpoint: Breakpoint) {
+  return theatreObjectsByBreakpoint[breakpoint];
+}
+
+export function getTheatreObject(id: ObjectId, breakpoint: Breakpoint = "desktop") {
+  return theatreObjectsByBreakpoint[breakpoint][id];
+}
+
+export function cloneTheatreObjectValue(value: TheatreObjectValue): TheatreObjectValue {
+  return {
+    anchor: { ...value.anchor },
+    position: { ...value.position },
+    rotation: { ...value.rotation },
+    scale: value.scale,
+    opacity: value.opacity,
+    visible: value.visible,
+    ...(typeof value.boxAnimationProgress === "number" ? { boxAnimationProgress: value.boxAnimationProgress } : {}),
+  };
+}
+
+function nearlyEqual(a: number, b: number) {
+  return Math.abs(a - b) < 0.0001;
+}
+
+export function areTheatreObjectValuesEqual(a: TheatreObjectValue, b: TheatreObjectValue) {
+  return (
+    nearlyEqual(a.anchor.x, b.anchor.x) &&
+    nearlyEqual(a.anchor.y, b.anchor.y) &&
+    nearlyEqual(a.position.x, b.position.x) &&
+    nearlyEqual(a.position.y, b.position.y) &&
+    nearlyEqual(a.position.z, b.position.z) &&
+    nearlyEqual(a.rotation.x, b.rotation.x) &&
+    nearlyEqual(a.rotation.y, b.rotation.y) &&
+    nearlyEqual(a.rotation.z, b.rotation.z) &&
+    nearlyEqual(a.scale, b.scale) &&
+    nearlyEqual(a.opacity, b.opacity) &&
+    a.visible === b.visible &&
+    nearlyEqual(a.boxAnimationProgress ?? 0, b.boxAnimationProgress ?? 0)
+  );
 }
 
 export function valueToSceneState(value: TheatreObjectValue) {

@@ -3,15 +3,16 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, OrthographicCamera, TransformControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
-import { anchorToWorld, applyViewport } from "./math";
+import { breakpointPreviewSizes, resolveBreakpointMode } from "./breakpoints";
+import { anchorToWorld, applyViewport, getWorldSize } from "./math";
 import { boxChildObjectIds, objectIds, renderObjectIds } from "./sceneObjects";
 import { editorStore, useEditorStore } from "./editorStore";
-import { getTheatreObject, theatreObjects, type TheatreObjectValue, valueToSceneState } from "./theatreProject";
+import { getTheatreObject, getTheatreObjects, type TheatreObjectValue, valueToSceneState } from "./theatreProject";
 import { selectTheatreObject, setTheatreObjectValue } from "./theatreStudio";
 import { useSceneProgress } from "./useSceneProgress";
 import { useViewportInfo } from "./useViewportInfo";
 import type { ProductCupColor } from "../components/StorySections";
-import type { AppliedSceneState, BoxChildObjectId, ObjectId } from "./types";
+import type { AppliedSceneState, BoxChildObjectId, Breakpoint, ObjectId } from "./types";
 
 const modelPath = "/models/merch_monk_website.glb";
 const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones", product_cup: "cup" };
@@ -187,9 +188,11 @@ function applyBoxChildStates(root: THREE.Object3D, childValues: BoxChildValues, 
     setOpacity(target, opacity);
   });
 }
-function initialTheatreValues(): TheatreValues {
+function initialTheatreValues(breakpoint: Breakpoint): TheatreValues {
+  const objects = getTheatreObjects(breakpoint);
+
   return objectIds.reduce((values, id) => {
-    values[id] = theatreObjects[id].value as TheatreObjectValue;
+    values[id] = objects[id].value as TheatreObjectValue;
     return values;
   }, {} as TheatreValues);
 }
@@ -209,9 +212,10 @@ type MerchObjectProps = {
   childValues: BoxChildValues;
   productCupColor: ProductCupColor;
   setSelectedRef: (instance: THREE.Object3D | null) => void;
+  activeBreakpoint: Breakpoint;
 };
 
-function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, animationProgress, childValues, productCupColor, setSelectedRef }: MerchObjectProps) {
+function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, animationProgress, childValues, productCupColor, setSelectedRef, activeBreakpoint }: MerchObjectProps) {
   const { scene, animations } = useGLTF(modelPath);
   const { camera, size } = useThree();
   const groupRef = useRef<THREE.Group | null>(null);
@@ -396,7 +400,7 @@ function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editor
           if (isBoxChildObjectId(clicked.name as ObjectId)) {
             editorStore.setSelection({ selectedObject: clicked.name as BoxChildObjectId });
             setSelectedRef(clicked);
-            void selectTheatreObject(clicked.name as BoxChildObjectId);
+            void selectTheatreObject(clicked.name as BoxChildObjectId, activeBreakpoint);
             return;
           }
           if (clicked === object) break;
@@ -404,7 +408,7 @@ function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editor
         }
 
         editorStore.setSelection({ selectedObject: id });
-        void selectTheatreObject(id);
+        void selectTheatreObject(id, activeBreakpoint);
       }}
     >
       <primitive object={object} />
@@ -417,22 +421,38 @@ type SceneContentProps = {
 };
 
 function SceneContent({ productCupColor }: SceneContentProps) {
-  useSceneProgress();
   const viewport = useViewportInfo();
   const editor = useEditorStore();
+  const activeBreakpoint = resolveBreakpointMode(editor.breakpointMode, viewport.breakpoint);
+  const activeViewport = useMemo(() => {
+    if (editor.breakpointMode === "auto") return { ...viewport, breakpoint: activeBreakpoint };
+
+    const previewSize = breakpointPreviewSizes[activeBreakpoint];
+    const worldSize = getWorldSize(previewSize.width, previewSize.height);
+    return {
+      ...viewport,
+      ...previewSize,
+      ...worldSize,
+      breakpoint: activeBreakpoint,
+    };
+  }, [activeBreakpoint, editor.breakpointMode, viewport]);
+  useSceneProgress(activeBreakpoint);
   const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
-  const [theatreValues, setTheatreValues] = useState<TheatreValues>(initialTheatreValues);
+  const [theatreValues, setTheatreValues] = useState<TheatreValues>(() => initialTheatreValues(activeBreakpoint));
 
   useEffect(() => {
-    const unsubscribers = objectIds.map((id) => theatreObjects[id].onValuesChange((value) => {
+    const objects = getTheatreObjects(activeBreakpoint);
+    setTheatreValues(initialTheatreValues(activeBreakpoint));
+
+    const unsubscribers = objectIds.map((id) => objects[id].onValuesChange((value) => {
       setTheatreValues((current) => ({ ...current, [id]: value as TheatreObjectValue }));
     }));
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, []);
+  }, [activeBreakpoint]);
 
   const applied = objectIds.reduce((result, id) => {
-    result[id] = applyViewport(valueToSceneState(theatreValues[id]), viewport);
+    result[id] = applyViewport(valueToSceneState(theatreValues[id]), activeViewport);
     return result;
   }, {} as AppliedSceneState);
   const boxChildValues = boxChildObjectIds.reduce((values, id) => {
@@ -443,7 +463,7 @@ function SceneContent({ productCupColor }: SceneContentProps) {
   function saveTransform() {
     if (!selectedObject) return;
 
-    const object = getTheatreObject(editor.selectedObject);
+    const object = getTheatreObject(editor.selectedObject, activeBreakpoint);
     const current = object.value;
 
     if (isBoxChildObjectId(editor.selectedObject)) {
@@ -469,11 +489,11 @@ function SceneContent({ productCupColor }: SceneContentProps) {
         opacity: Math.max(current.opacity, 1),
       };
 
-      void setTheatreObjectValue(editor.selectedObject, next);
+      void setTheatreObjectValue(editor.selectedObject, next, activeBreakpoint);
       return;
     }
 
-    const anchorWorld = anchorToWorld([current.anchor.x, current.anchor.y], viewport);
+    const anchorWorld = anchorToWorld([current.anchor.x, current.anchor.y], activeViewport);
     const next: Partial<TheatreObjectValue> = {
       position: {
         x: selectedObject.position.x - anchorWorld[0],
@@ -490,7 +510,7 @@ function SceneContent({ productCupColor }: SceneContentProps) {
       opacity: Math.max(current.opacity, 1),
     };
 
-    void setTheatreObjectValue(editor.selectedObject, next);
+    void setTheatreObjectValue(editor.selectedObject, next, activeBreakpoint);
   }
 
   return (
@@ -498,7 +518,7 @@ function SceneContent({ productCupColor }: SceneContentProps) {
       <OrthographicCamera
         makeDefault
         position={[0, 0, 12]}
-        zoom={viewport.height / viewport.worldHeight}
+        zoom={activeViewport.height / activeViewport.worldHeight}
         near={0.01}
         far={100}
       />
@@ -520,6 +540,7 @@ function SceneContent({ productCupColor }: SceneContentProps) {
           childValues={boxChildValues}
           productCupColor={productCupColor}
           setSelectedRef={setSelectedObject}
+          activeBreakpoint={activeBreakpoint}
         />
       ))}
       {editor.enabled && selectedObject && (renderObjectIds.includes(editor.selectedObject) || isBoxChildObjectId(editor.selectedObject)) ? (

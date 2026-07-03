@@ -1,11 +1,6 @@
-import type { AppliedSceneState, Breakpoint, SceneObjectState, SceneState, Vec3, ViewportInfo } from "./types";
+import type { AppliedSceneState, SceneObjectState, SceneState, Vec3, ViewportInfo } from "./types";
 import { objectIds } from "./sceneObjects";
 
-export function getBreakpoint(width: number): Breakpoint {
-  if (width < 700) return "mobile";
-  if (width < 1100) return "tablet";
-  return "desktop";
-}
 
 export function getWorldSize(width: number, height: number) {
   const worldHeight = 10;

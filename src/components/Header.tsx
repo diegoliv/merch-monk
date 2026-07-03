@@ -1,4 +1,4 @@
-﻿import { Logo } from "./Logo";
+import { Logo } from "./Logo";
 
 export function Header() {
   return (
@@ -18,6 +18,11 @@ export function Header() {
           <a href="#minutes">Book a demo</a>
         </nav>
         <a className="button button-primary header-cta" href="#ordering">Create Merch</a>
+        <button className="menu-button" type="button" aria-label="Open menu">
+          <span />
+          <span />
+          <span />
+        </button>
       </div>
     </header>
   );
