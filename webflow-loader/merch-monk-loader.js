@@ -7,7 +7,7 @@
   var normalizedProductionBase = productionBase.replace(/\/$/, "") + "/";
   var productionEntry = config.productionEntry || normalizedProductionBase + "merch-monk-webflow.js";
   var productionCss = config.productionCss || normalizedProductionBase + "style.css";
-  var timeoutMs = config.localTimeoutMs || 800;
+  var timeoutMs = config.localTimeoutMs || 1200;
   var loaded = false;
   var hasCustomEditor = typeof config.editor === "boolean";
   var hasCustomModelUrl = Boolean(config.modelUrl);
@@ -33,6 +33,16 @@
     return script;
   }
 
+  function appendInlineModule(source, onLoad, onError) {
+    var script = document.createElement("script");
+    script.type = "module";
+    script.textContent = source;
+    script.onload = onLoad;
+    script.onerror = onError;
+    document.head.appendChild(script);
+    return script;
+  }
+
   function loadProduction() {
     if (loaded) return;
     loaded = true;
@@ -42,18 +52,39 @@
     appendModule(productionEntry);
   }
 
-  var timeout = window.setTimeout(loadProduction, timeoutMs);
+  function loadLocal() {
+    var refreshPreamble = [
+      'import RefreshRuntime from "' + normalizedLocalOrigin + '/@react-refresh";',
+      'RefreshRuntime.injectIntoGlobalHook(window);',
+      'window.$RefreshReg$ = function () {};',
+      'window.$RefreshSig$ = function () { return function (type) { return type; }; };',
+      'window.__vite_plugin_react_preamble_installed__ = true;',
+      'import "' + normalizedLocalOrigin + '/@vite/client";',
+    ].join("\n");
 
-  appendModule(
-    localEntry,
-    function () {
-      if (loaded) return;
-      loaded = true;
-      window.clearTimeout(timeout);
-    },
-    function () {
-      window.clearTimeout(timeout);
-      loadProduction();
-    },
-  );
+    appendInlineModule(
+      refreshPreamble,
+      function () {
+        appendModule(
+          localEntry,
+          function () {
+            if (loaded) return;
+            loaded = true;
+            window.clearTimeout(timeout);
+          },
+          function () {
+            window.clearTimeout(timeout);
+            loadProduction();
+          },
+        );
+      },
+      function () {
+        window.clearTimeout(timeout);
+        loadProduction();
+      },
+    );
+  }
+
+  var timeout = window.setTimeout(loadProduction, timeoutMs);
+  loadLocal();
 })();
