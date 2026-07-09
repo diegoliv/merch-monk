@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { breakpointLabels, breakpoints, resolveBreakpointMode, type BreakpointMode } from "./breakpoints";
+import { breakpointLabels, breakpoints, resolveBreakpointMode } from "./breakpoints";
 import { editorStore, useEditorStore } from "./editorStore";
 import { objectIds } from "./sceneObjects";
 import { areTheatreObjectValuesEqual, getTheatreObject, type TheatreObjectValue } from "./theatreProject";
@@ -53,10 +53,7 @@ function HoverControl({ label, value, min, max, step, onChange }: HoverControlPr
   );
 }
 
-const breakpointOptions: { value: BreakpointMode; label: string }[] = [
-  { value: "auto", label: "Auto" },
-  ...breakpoints.map((breakpoint) => ({ value: breakpoint, label: breakpointLabels[breakpoint] })),
-];
+const breakpointOptions = breakpoints.map((breakpoint) => ({ value: breakpoint, label: breakpointLabels[breakpoint] }));
 
 function formatObjectId(id: ObjectId) {
   return id.replace(/_/g, " ");
@@ -155,6 +152,10 @@ export function SceneEditor() {
   const editor = useEditorStore();
   const viewport = useViewportInfo();
   const activeBreakpoint = resolveBreakpointMode(editor.breakpointMode, viewport.breakpoint);
+
+  useEffect(() => {
+    if (editor.breakpointMode === "auto") editorStore.setSelection({ breakpointMode: "desktop" });
+  }, [editor.breakpointMode]);
   const [responsiveStatus, setResponsiveStatus] = useState<ResponsiveStatus>(() => readResponsiveStatus(editor.selectedObject, activeBreakpoint));
   const [controlsExpanded, setControlsExpanded] = useState(true);
 

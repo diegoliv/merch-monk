@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, type CSSProperties, type WheelEvent } f
 import { Header } from "./components/Header";
 import { HeroSection } from "./components/HeroSection";
 import { FeatureSection, FinalCtaSection, PricingConfiguratorSection, SplitStatementSection, productCupColors, type ProductCupColorKey } from "./components/StorySections";
-import { breakpointPreviewSizes, resolveBreakpointMode } from "./three/breakpoints";
+import { breakpointPreviewRanges, breakpointPreviewSizes, resolveBreakpointMode } from "./three/breakpoints";
 import { GlobalSceneCanvas } from "./three/GlobalSceneCanvas";
 import { SceneEditor } from "./three/SceneEditor";
 import { useEditorStore } from "./three/editorStore";
@@ -15,8 +15,14 @@ export default function App() {
   const activeBreakpoint = resolveBreakpointMode(editor.breakpointMode, viewport.breakpoint);
   const isPreviewingBreakpoint = editor.enabled && editor.breakpointMode !== "auto";
   const previewSize = breakpointPreviewSizes[activeBreakpoint];
+  const previewRange = breakpointPreviewRanges[activeBreakpoint];
   const previewStyle = isPreviewingBreakpoint
-    ? ({ "--preview-width": `${previewSize.width}px`, "--preview-height": `${previewSize.height}px` } as CSSProperties)
+    ? ({
+      "--preview-width": `${previewSize.width}px`,
+      "--preview-height": `${previewSize.height}px`,
+      "--preview-min-width": `${previewRange.minWidth}px`,
+      "--preview-max-width": `${previewRange.maxWidth}px`,
+    } as CSSProperties)
     : undefined;
   const [selectedProductColor, setSelectedProductColor] = useState<ProductCupColorKey>("orange");
   const productCupColor = useMemo(

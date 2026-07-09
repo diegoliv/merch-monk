@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { breakpointPreviewSizes, resolveBreakpointMode } from "./three/breakpoints";
+import { breakpointPreviewRanges, breakpointPreviewSizes, resolveBreakpointMode } from "./three/breakpoints";
 import { GlobalSceneCanvas } from "./three/GlobalSceneCanvas";
 import { SceneEditor } from "./three/SceneEditor";
 import { editorStore, useEditorStore } from "./three/editorStore";
@@ -14,6 +14,7 @@ type WebflowExperienceProps = {
 
 const previewClass = "merch-monk-previewing";
 const editorActiveClass = "merch-monk-editor-active";
+const bodyEditorActiveClass = "merch-monk-webflow-editing";
 
 export function WebflowExperience({ runtime, productColor = "orange", showEditor = false }: WebflowExperienceProps) {
   const editor = useEditorStore();
@@ -23,12 +24,20 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
   );
   const pageElement = runtime.pageElement;
   const activeBreakpoint = resolveBreakpointMode(editor.breakpointMode, "desktop");
-  const isPreviewingBreakpoint = showEditor && editor.enabled && editor.breakpointMode !== "auto";
+  const isPreviewingBreakpoint = showEditor && editor.enabled;
 
   useEffect(() => {
+    if (editor.breakpointMode === "auto") {
+      editorStore.setSelection({ breakpointMode: "desktop" });
+    }
     if (!showEditor && editor.enabled) {
       editorStore.setSelection({ enabled: false });
     }
+  }, [editor.breakpointMode, editor.enabled, showEditor]);
+
+  useEffect(() => {
+    document.body.classList.toggle(bodyEditorActiveClass, showEditor && editor.enabled);
+    return () => document.body.classList.remove(bodyEditorActiveClass);
   }, [editor.enabled, showEditor]);
 
   useEffect(() => {
@@ -66,13 +75,18 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
     if (!isPreviewingBreakpoint) {
       pageElement.style.removeProperty("--preview-width");
       pageElement.style.removeProperty("--preview-height");
+      pageElement.style.removeProperty("--preview-min-width");
+      pageElement.style.removeProperty("--preview-max-width");
       pageElement.removeAttribute("data-lenis-prevent");
       return;
     }
 
     const previewSize = breakpointPreviewSizes[activeBreakpoint];
+    const previewRange = breakpointPreviewRanges[activeBreakpoint];
     pageElement.style.setProperty("--preview-width", `${previewSize.width}px`);
     pageElement.style.setProperty("--preview-height", `${previewSize.height}px`);
+    pageElement.style.setProperty("--preview-min-width", `${previewRange.minWidth}px`);
+    pageElement.style.setProperty("--preview-max-width", `${previewRange.maxWidth}px`);
     pageElement.setAttribute("data-lenis-prevent", "");
   }, [activeBreakpoint, editor.enabled, isPreviewingBreakpoint, pageElement, showEditor]);
 

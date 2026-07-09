@@ -68,11 +68,12 @@ a {
 }
 
 .responsive-preview-frame.is-previewing {
-  width: min(var(--preview-width), calc(100vw - 360px));
+  width: clamp(var(--preview-min-width), var(--preview-width), min(var(--preview-max-width), calc(100vw - 360px)));
   height: min(var(--preview-height), calc(100vh - 32px));
   min-height: 0;
   margin: 16px auto;
   overflow: auto;
+  resize: horizontal;
   border: 1px solid rgba(17, 17, 17, 0.08);
   border-radius: 10px;
   box-shadow: 0 24px 70px rgba(17, 17, 17, 0.16);
@@ -1541,11 +1542,12 @@ main {
 }
 
 .merch-monk-page.merch-monk-previewing {
-  width: min(var(--preview-width), calc(100vw - 360px));
+  width: clamp(var(--preview-min-width), var(--preview-width), min(var(--preview-max-width), calc(100vw - 360px)));
   height: min(var(--preview-height), calc(100vh - 32px));
   min-height: 0;
   margin: 16px auto;
   overflow: auto;
+  resize: horizontal;
   border: 1px solid rgba(17, 17, 17, 0.08);
   border-radius: 10px;
   background: #ffffff;
@@ -1560,6 +1562,9 @@ main {
 
 @media (max-width: 760px) {
   .merch-monk-page.merch-monk-previewing {
-    width: calc(100vw - 24px);
+    width: clamp(var(--preview-min-width), calc(100vw - 24px), var(--preview-max-width));
   }
+}
+body.merch-monk-webflow-editing .w-webflow-badge {
+  display: none !important;
 }
