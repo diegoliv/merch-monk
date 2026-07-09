@@ -28,7 +28,7 @@ export type SceneObjectState = {
 };
 
 export type ResponsiveObjectState = Record<Breakpoint, SceneObjectState>;
-export type SceneStateId = "heroIntro" | "heroOutro" | "catalogIntro" | "processIntro" | "finalCtaIntro";
+export type SceneStateId = "heroIntro" | "heroOutro" | "catalogIntro" | "processIntro" | "momoIntro" | "finalCtaIntro";
 export type SceneState = Record<ObjectId, ResponsiveObjectState>;
 
 export type TimelineStep = {

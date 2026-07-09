@@ -12,9 +12,10 @@ import { selectTheatreObject, setTheatreObjectValue } from "./theatreStudio";
 import { useSceneProgress } from "./useSceneProgress";
 import { useViewportInfo } from "./useViewportInfo";
 import type { ProductCupColor } from "../components/StorySections";
+import { useExperienceRuntime } from "../experienceRuntime";
 import type { AppliedSceneState, BoxChildObjectId, Breakpoint, ObjectId } from "./types";
 
-const modelPath = "/models/merch_monk_website.glb";
+const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
 const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones", product_cup: "cup" };
 const boxAnimationNames = new Set(["box_open"]);
 
@@ -556,9 +557,10 @@ type GlobalSceneCanvasProps = {
 
 export function GlobalSceneCanvas({ productCupColor }: GlobalSceneCanvasProps) {
   const editor = useEditorStore();
+  const runtime = useExperienceRuntime();
 
   return (
-    <div className={`scene-layer ${editor.enabled ? "is-editing" : ""}`} aria-hidden="true">
+    <div className={`scene-layer ${runtime.mode === "webflow" ? "is-webflow" : ""} ${editor.enabled ? "is-editing" : ""}`} aria-hidden="true">
       <Canvas
         gl={{ antialias: true, alpha: true }}
         dpr={[1, 2]}

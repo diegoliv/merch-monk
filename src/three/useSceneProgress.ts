@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useExperienceRuntime } from "../experienceRuntime";
 import { editorStore, useEditorStore } from "./editorStore";
 import { sceneTimeline } from "./sceneTimeline";
 import { getTheatreSheet } from "./theatreProject";
@@ -22,6 +23,7 @@ let latestSequencePosition = 0;
 
 export function useSceneProgress(activeBreakpoint: Breakpoint) {
   const editor = useEditorStore();
+  const runtime = useExperienceRuntime();
   const [progress, setProgress] = useState(initialProgress);
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export function useSceneProgress(activeBreakpoint: Breakpoint) {
     const sheet = getTheatreSheet(activeBreakpoint);
     const scroller = editor.breakpointMode === "auto"
       ? undefined
-      : document.querySelector<HTMLElement>(".responsive-preview-frame.is-previewing") ?? undefined;
+      : document.querySelector<HTMLElement>(runtime.previewScrollerSelector) ?? undefined;
     sheet.sequence.position = latestSequencePosition;
 
     sceneTimeline.forEach((step, index) => {
@@ -64,7 +66,7 @@ export function useSceneProgress(activeBreakpoint: Breakpoint) {
     return () => {
       triggers.forEach((trigger) => trigger.kill());
     };
-  }, [activeBreakpoint, editor.breakpointMode, editor.markers, editor.enabled, editor.selectedObject]);
+  }, [activeBreakpoint, editor.breakpointMode, editor.markers, editor.enabled, editor.selectedObject, runtime.previewScrollerSelector]);
 
   return progress;
 }

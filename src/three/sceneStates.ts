@@ -151,6 +151,19 @@ export const sceneStates: Record<SceneStateId, SceneState> = {
       visible: true,
     }, { scale: 0.9 }, { anchor: [0.7, 0.72], scale: 0.52 }),
   }),
+  momoIntro: makeState({
+    box: responsive({
+      anchor: [0.52, 0.5],
+      position: [0, 0, 0.1],
+      rotation: [0.18, -0.32, 0.02],
+      scale: 1.34,
+      opacity: 1,
+      visible: true,
+    }, { scale: 1.02 }, { anchor: [0.5, 0.5], scale: 0.58 }),
+    cap: responsive({ ...capHero.desktop, anchor: [0.22, 0.28], scale: 0.54, opacity: 0.45 }),
+    cup: responsive({ ...cupHero.desktop, anchor: [0.82, 0.74], scale: 0.46, opacity: 0.5 }),
+    notebook: responsive({ ...notebookHero.desktop, anchor: [0.82, 0.24], scale: 0.52, opacity: 0.42 }),
+  }),
   finalCtaIntro: makeState({
     "tote": responsive({
       anchor: [0.35, 0.52],
