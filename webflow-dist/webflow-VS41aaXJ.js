@@ -44133,7 +44133,7 @@ function g8(s) {
 }
 let X0 = null, rP = !1;
 async function Y_() {
-  X0 || (X0 = import("./index-DA2qxTo9.js").then((e) => e.i).then((e) => e.default));
+  X0 || (X0 = import("./index-Cjh8MoN0.js").then((e) => e.i).then((e) => e.default));
   const s = await X0;
   return rP || (s.initialize({ persistenceKey: "merch-monk-theatre-studio-neutral" }), rP = !0), s;
 }
@@ -48054,7 +48054,7 @@ function I6({ runtime: s, productColor: e = "orange", showEditor: t = !1 }) {
   ] });
 }
 function eI() {
-  const s = window.MerchMonkWebflow ?? {}, e = s.canvasSelector ?? ".canvas-wrapper", t = s.pageSelector ?? ".page-wrapper", n = document.querySelector(e), r = document.querySelector(t);
+  const s = window.MerchMonkWebflow ?? {}, e = s.canvasSelector ?? ".canvas-layer_middle", t = s.pageSelector ?? ".page-wrapper", n = document.querySelector(e), r = document.querySelector(t);
   if (!n) {
     console.warn(`[Merch Monk] Canvas mount target not found: ${e}`);
     return;

@@ -21,7 +21,7 @@ declare global {
 
 function mountWebflowExperience() {
   const config = window.MerchMonkWebflow ?? {};
-  const canvasSelector = config.canvasSelector ?? ".canvas-wrapper";
+  const canvasSelector = config.canvasSelector ?? ".canvas-layer_middle";
   const pageSelector = config.pageSelector ?? ".page-wrapper";
   const canvasElement = document.querySelector<HTMLElement>(canvasSelector);
   const pageElement = document.querySelector<HTMLElement>(pageSelector);
