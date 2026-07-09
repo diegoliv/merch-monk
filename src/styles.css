@@ -69,11 +69,10 @@ a {
 
 .responsive-preview-frame.is-previewing {
   width: clamp(var(--preview-min-width), var(--preview-width), min(var(--preview-max-width), calc(100vw - 360px)));
-  height: min(var(--preview-height), calc(100vh - 32px));
+  height: clamp(var(--preview-min-height), var(--preview-height), var(--preview-max-height));
   min-height: 0;
   margin: 16px auto;
   overflow: auto;
-  resize: horizontal;
   border: 1px solid rgba(17, 17, 17, 0.08);
   border-radius: 10px;
   box-shadow: 0 24px 70px rgba(17, 17, 17, 0.16);
@@ -1534,6 +1533,107 @@ main {
   pointer-events: auto;
 }
 
+
+.merch-monk-resize-handles {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.merch-monk-resize-handle {
+  position: absolute;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.merch-monk-resize-handle::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(255, 74, 9, 0.72);
+  opacity: 0;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.merch-monk-resize-handle:hover::after,
+.merch-monk-resize-handle:active::after {
+  opacity: 1;
+}
+
+.merch-monk-resize-handle.is-left,
+.merch-monk-resize-handle.is-right {
+  top: 18px;
+  bottom: 18px;
+  width: 18px;
+  cursor: ew-resize;
+}
+
+.merch-monk-resize-handle.is-left { left: -9px; }
+.merch-monk-resize-handle.is-right { right: -9px; }
+
+.merch-monk-resize-handle.is-left::after,
+.merch-monk-resize-handle.is-right::after {
+  top: 50%;
+  width: 4px;
+  height: min(160px, 34%);
+  transform: translateY(-50%) scaleX(0.8);
+}
+
+.merch-monk-resize-handle.is-left::after { left: 7px; }
+.merch-monk-resize-handle.is-right::after { right: 7px; }
+
+.merch-monk-resize-handle.is-top,
+.merch-monk-resize-handle.is-bottom {
+  left: 18px;
+  right: 18px;
+  height: 18px;
+  cursor: ns-resize;
+}
+
+.merch-monk-resize-handle.is-top { top: -9px; }
+.merch-monk-resize-handle.is-bottom { bottom: -9px; }
+
+.merch-monk-resize-handle.is-top::after,
+.merch-monk-resize-handle.is-bottom::after {
+  left: 50%;
+  width: min(180px, 36%);
+  height: 4px;
+  transform: translateX(-50%) scaleY(0.8);
+}
+
+.merch-monk-resize-handle.is-top::after { top: 7px; }
+.merch-monk-resize-handle.is-bottom::after { bottom: 7px; }
+
+.merch-monk-resize-handle.is-top-left,
+.merch-monk-resize-handle.is-top-right,
+.merch-monk-resize-handle.is-bottom-left,
+.merch-monk-resize-handle.is-bottom-right {
+  width: 28px;
+  height: 28px;
+}
+
+.merch-monk-resize-handle.is-top-left,
+.merch-monk-resize-handle.is-bottom-right { cursor: nwse-resize; }
+.merch-monk-resize-handle.is-top-right,
+.merch-monk-resize-handle.is-bottom-left { cursor: nesw-resize; }
+
+.merch-monk-resize-handle.is-top-left { top: -14px; left: -14px; }
+.merch-monk-resize-handle.is-top-right { top: -14px; right: -14px; }
+.merch-monk-resize-handle.is-bottom-left { bottom: -14px; left: -14px; }
+.merch-monk-resize-handle.is-bottom-right { right: -14px; bottom: -14px; }
+
+.merch-monk-resize-handle.is-top-left::after,
+.merch-monk-resize-handle.is-top-right::after,
+.merch-monk-resize-handle.is-bottom-left::after,
+.merch-monk-resize-handle.is-bottom-right::after {
+  inset: 8px;
+  border: 2px solid rgba(255, 74, 9, 0.86);
+  background: #ffffff;
+}
 .scene-layer.is-webflow {
   position: absolute;
   inset: 0;
@@ -1543,11 +1643,10 @@ main {
 
 .merch-monk-page.merch-monk-previewing {
   width: clamp(var(--preview-min-width), var(--preview-width), min(var(--preview-max-width), calc(100vw - 360px)));
-  height: min(var(--preview-height), calc(100vh - 32px));
+  height: clamp(var(--preview-min-height), var(--preview-height), var(--preview-max-height));
   min-height: 0;
   margin: 16px auto;
   overflow: auto;
-  resize: horizontal;
   border: 1px solid rgba(17, 17, 17, 0.08);
   border-radius: 10px;
   background: #ffffff;

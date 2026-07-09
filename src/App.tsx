@@ -22,6 +22,8 @@ export default function App() {
       "--preview-height": `${previewSize.height}px`,
       "--preview-min-width": `${previewRange.minWidth}px`,
       "--preview-max-width": `${previewRange.maxWidth}px`,
+      "--preview-min-height": "360px",
+      "--preview-max-height": "1800px",
     } as CSSProperties)
     : undefined;
   const [selectedProductColor, setSelectedProductColor] = useState<ProductCupColorKey>("orange");
