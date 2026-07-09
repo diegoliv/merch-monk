@@ -13,6 +13,7 @@ type WebflowExperienceProps = {
 };
 
 const previewClass = "merch-monk-previewing";
+const editorActiveClass = "merch-monk-editor-active";
 
 export function WebflowExperience({ runtime, productColor = "orange", showEditor = false }: WebflowExperienceProps) {
   const editor = useEditorStore();
@@ -40,6 +41,7 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
       pageElement.classList.remove(
         "merch-monk-page",
         previewClass,
+        editorActiveClass,
         "is-desktop-layout",
         "is-tablet-layout",
         "is-mobile-layout",
@@ -55,6 +57,7 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
   useEffect(() => {
     if (!pageElement) return;
 
+    pageElement.classList.toggle(editorActiveClass, showEditor && editor.enabled);
     pageElement.classList.toggle(previewClass, isPreviewingBreakpoint);
     pageElement.classList.toggle("is-desktop-layout", isPreviewingBreakpoint && activeBreakpoint === "desktop");
     pageElement.classList.toggle("is-tablet-layout", isPreviewingBreakpoint && activeBreakpoint === "tablet");
@@ -71,7 +74,7 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
     pageElement.style.setProperty("--preview-width", `${previewSize.width}px`);
     pageElement.style.setProperty("--preview-height", `${previewSize.height}px`);
     pageElement.setAttribute("data-lenis-prevent", "");
-  }, [activeBreakpoint, isPreviewingBreakpoint, pageElement]);
+  }, [activeBreakpoint, editor.enabled, isPreviewingBreakpoint, pageElement, showEditor]);
 
   return (
     <>

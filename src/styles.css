@@ -1525,6 +1525,14 @@ main {
   pointer-events: none;
 }
 
+.merch-monk-page.merch-monk-editor-active > * {
+  pointer-events: none;
+}
+
+.merch-monk-page.merch-monk-editor-active .merch-monk-canvas-host {
+  pointer-events: auto;
+}
+
 .scene-layer.is-webflow {
   position: absolute;
   inset: 0;
