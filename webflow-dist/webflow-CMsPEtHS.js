@@ -44133,7 +44133,7 @@ function g8(s) {
 }
 let X0 = null, rP = !1;
 async function Y_() {
-  X0 || (X0 = import("./index-DO_Xc6cX.js").then((e) => e.i).then((e) => e.default));
+  X0 || (X0 = import("./index-DA2qxTo9.js").then((e) => e.i).then((e) => e.default));
   const s = await X0;
   return rP || (s.initialize({ persistenceKey: "merch-monk-theatre-studio-neutral" }), rP = !0), s;
 }
@@ -47986,7 +47986,11 @@ function ZP(s) {
   };
 }
 function $P(s) {
-  return s === "desktop" ? _L() : rI[s];
+  const e = _L();
+  return s === "desktop" ? e : {
+    width: rI[s].width,
+    height: e.height
+  };
 }
 function I6({ runtime: s, productColor: e = "orange", showEditor: t = !1 }) {
   const n = J_(), r = Le.useMemo(

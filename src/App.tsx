@@ -14,7 +14,7 @@ export default function App() {
   const viewport = useViewportInfo();
   const activeBreakpoint = resolveBreakpointMode(editor.breakpointMode, viewport.breakpoint);
   const isPreviewingBreakpoint = editor.enabled && editor.breakpointMode !== "auto";
-  const previewSize = breakpointPreviewSizes[activeBreakpoint];
+  const previewSize = { ...breakpointPreviewSizes[activeBreakpoint], height: viewport.height };
   const previewRange = breakpointPreviewRanges[activeBreakpoint];
   const previewStyle = isPreviewingBreakpoint
     ? ({

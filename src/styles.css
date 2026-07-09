@@ -71,11 +71,15 @@ a {
   width: clamp(var(--preview-min-width), var(--preview-width), min(var(--preview-max-width), calc(100vw - 360px)));
   height: clamp(var(--preview-min-height), var(--preview-height), var(--preview-max-height));
   min-height: 0;
-  margin: 16px auto;
+  margin: 0 auto;
   overflow: auto;
   border: 1px solid rgba(17, 17, 17, 0.08);
   border-radius: 10px;
   box-shadow: 0 24px 70px rgba(17, 17, 17, 0.16);
+}
+
+.responsive-preview-frame.is-previewing.is-desktop-layout {
+  width: clamp(var(--preview-min-width), var(--preview-width), 100vw);
 }
 
 .responsive-preview-frame.is-previewing .scene-layer {
@@ -1645,7 +1649,7 @@ main {
   width: clamp(var(--preview-min-width), var(--preview-width), min(var(--preview-max-width), calc(100vw - 360px)));
   height: clamp(var(--preview-min-height), var(--preview-height), var(--preview-max-height));
   min-height: 0;
-  margin: 16px auto;
+  margin: 0 auto;
   overflow: auto;
   border: 1px solid rgba(17, 17, 17, 0.08);
   border-radius: 10px;
@@ -1654,13 +1658,17 @@ main {
   container: page-preview / inline-size;
 }
 
+.merch-monk-page.merch-monk-previewing.is-desktop-layout {
+  width: clamp(var(--preview-min-width), var(--preview-width), 100vw);
+}
+
 .merch-monk-page.merch-monk-previewing .merch-monk-canvas-host {
   height: var(--preview-height);
   margin-bottom: calc(var(--preview-height) * -1);
 }
 
 @media (max-width: 760px) {
-  .merch-monk-page.merch-monk-previewing {
+  .merch-monk-page.merch-monk-previewing:not(.is-desktop-layout) {
     width: clamp(var(--preview-min-width), calc(100vw - 24px), var(--preview-max-width));
   }
 }

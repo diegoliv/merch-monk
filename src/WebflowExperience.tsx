@@ -48,8 +48,12 @@ function getPreviewRange(breakpoint: Breakpoint) {
 }
 
 function getInitialPreviewSize(breakpoint: Breakpoint): PreviewSize {
-  if (breakpoint === "desktop") return getViewportSize();
-  return breakpointPreviewSizes[breakpoint];
+  const viewport = getViewportSize();
+  if (breakpoint === "desktop") return viewport;
+  return {
+    width: breakpointPreviewSizes[breakpoint].width,
+    height: viewport.height,
+  };
 }
 
 export function WebflowExperience({ runtime, productColor = "orange", showEditor = false }: WebflowExperienceProps) {
