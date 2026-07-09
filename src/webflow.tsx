@@ -8,6 +8,7 @@ import type { ProductCupColorKey } from "./components/StorySections";
 type MerchMonkWebflowConfig = {
   canvasSelector?: string;
   pageSelector?: string;
+  preferLocal?: boolean;
   productColor?: ProductCupColorKey;
   modelUrl?: string;
   editor?: boolean;

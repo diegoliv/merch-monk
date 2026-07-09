@@ -8,6 +8,8 @@
   var productionEntry = config.productionEntry || normalizedProductionBase + "merch-monk-webflow.js";
   var productionCss = config.productionCss || normalizedProductionBase + "style.css";
   var localTimeoutMs = config.localTimeoutMs || 2500;
+  var preferLocal = config.preferLocal !== false;
+  var editorRequested = new URLSearchParams(window.location.search).get("editor") === "true";
   var loaded = false;
   var hasCustomEditor = typeof config.editor === "boolean";
   var hasCustomModelUrl = Boolean(config.modelUrl);
@@ -19,7 +21,7 @@
     window.globalThis.process = window.process;
   }
 
-  if (!hasCustomEditor) config.editor = true;
+  if (!hasCustomEditor) config.editor = preferLocal || editorRequested;
   if (!hasCustomModelUrl) config.modelUrl = normalizedLocalOrigin + "/models/merch_monk_website.glb";
   window.MerchMonkWebflow = config;
   ensureProcessEnv("development");
@@ -55,7 +57,7 @@
     if (loaded) return;
     loaded = true;
     ensureProcessEnv("production");
-    if (!hasCustomEditor) config.editor = false;
+    if (!hasCustomEditor) config.editor = editorRequested;
     if (!hasCustomModelUrl) config.modelUrl = normalizedProductionBase + "models/merch_monk_website.glb";
     appendCss(productionCss);
     appendModule(productionEntry);
@@ -86,9 +88,12 @@
     );
   }
 
-  window.setTimeout(function () {
-    if (!loaded) loadProduction();
-  }, localTimeoutMs);
-
-  loadLocal();
+  if (preferLocal) {
+    window.setTimeout(function () {
+      if (!loaded) loadProduction();
+    }, localTimeoutMs);
+    loadLocal();
+  } else {
+    loadProduction();
+  }
 })();
