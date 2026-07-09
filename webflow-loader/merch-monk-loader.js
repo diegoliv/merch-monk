@@ -7,14 +7,22 @@
   var normalizedProductionBase = productionBase.replace(/\/$/, "") + "/";
   var productionEntry = config.productionEntry || normalizedProductionBase + "merch-monk-webflow.js";
   var productionCss = config.productionCss || normalizedProductionBase + "style.css";
-  var timeoutMs = config.localTimeoutMs || 1200;
+  var localTimeoutMs = config.localTimeoutMs || 2500;
   var loaded = false;
   var hasCustomEditor = typeof config.editor === "boolean";
   var hasCustomModelUrl = Boolean(config.modelUrl);
 
+  function ensureProcessEnv(mode) {
+    window.process = window.process || {};
+    window.process.env = window.process.env || {};
+    window.process.env.NODE_ENV = window.process.env.NODE_ENV || mode;
+    window.globalThis.process = window.process;
+  }
+
   if (!hasCustomEditor) config.editor = true;
   if (!hasCustomModelUrl) config.modelUrl = normalizedLocalOrigin + "/models/merch_monk_website.glb";
   window.MerchMonkWebflow = config;
+  ensureProcessEnv("development");
 
   function appendCss(href) {
     var link = document.createElement("link");
@@ -46,6 +54,7 @@
   function loadProduction() {
     if (loaded) return;
     loaded = true;
+    ensureProcessEnv("production");
     if (!hasCustomEditor) config.editor = false;
     if (!hasCustomModelUrl) config.modelUrl = normalizedProductionBase + "models/merch_monk_website.glb";
     appendCss(productionCss);
@@ -68,23 +77,18 @@
         appendModule(
           localEntry,
           function () {
-            if (loaded) return;
             loaded = true;
-            window.clearTimeout(timeout);
           },
-          function () {
-            window.clearTimeout(timeout);
-            loadProduction();
-          },
+          loadProduction,
         );
       },
-      function () {
-        window.clearTimeout(timeout);
-        loadProduction();
-      },
+      loadProduction,
     );
   }
 
-  var timeout = window.setTimeout(loadProduction, timeoutMs);
+  window.setTimeout(function () {
+    if (!loaded) loadProduction();
+  }, localTimeoutMs);
+
   loadLocal();
 })();

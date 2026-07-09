@@ -3,6 +3,10 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("production"),
+    "process.env": JSON.stringify({ NODE_ENV: "production" }),
+  },
   build: {
     assetsInlineLimit: 0,
     cssCodeSplit: false,
@@ -24,4 +28,3 @@ export default defineConfig({
     },
   },
 });
-
