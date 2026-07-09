@@ -72,7 +72,8 @@ a {
   height: clamp(var(--preview-min-height), var(--preview-height), var(--preview-max-height));
   min-height: 0;
   margin: 0 auto;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px solid rgba(17, 17, 17, 0.08);
   border-radius: 10px;
   box-shadow: 0 24px 70px rgba(17, 17, 17, 0.16);
@@ -1650,7 +1651,8 @@ main {
   height: clamp(var(--preview-min-height), var(--preview-height), var(--preview-max-height));
   min-height: 0;
   margin: 0 auto;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px solid rgba(17, 17, 17, 0.08);
   border-radius: 10px;
   background: #ffffff;
