@@ -3,6 +3,7 @@ import type { ISheetObject, __UNSTABLE_Project_OnDiskState } from "@theatre/core
 import { breakpoints } from "./breakpoints";
 import { boxChildObjectIds, objectIds } from "./sceneObjects";
 import { sceneTimeline } from "./sceneTimeline";
+import productionTheatreStateJson from "./merch-monk-home.theatre-project-state.json";
 import type { Breakpoint, ObjectId } from "./types";
 
 export type TheatreObjectValue = {
@@ -18,11 +19,7 @@ export type TheatreObjectValue = {
 export const theatreProjectId = "Merch Monk Scene Neutral";
 export const theatreSequenceLength = sceneTimeline.length;
 
-const productionTheatreState = {
-  sheetsById: {},
-  definitionVersion: "0.4.0",
-  revisionHistory: ["merch-monk-production-baseline"],
-} satisfies __UNSTABLE_Project_OnDiskState;
+const productionTheatreState = productionTheatreStateJson as __UNSTABLE_Project_OnDiskState;
 
 export const theatreProject = getProject(
   theatreProjectId,
