@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { ExperienceRuntimeProvider } from "./experienceRuntime";
 import { WebflowExperience } from "./WebflowExperience";
-import "./styles.css";
+import "./webflow.css";
 import type { ProductCupColorKey } from "./components/StorySections";
 
 type MerchMonkWebflowConfig = {
