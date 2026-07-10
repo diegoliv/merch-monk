@@ -19,7 +19,9 @@ export type TheatreObjectValue = {
 export const theatreProjectId = "Merch Monk Scene Neutral";
 export const theatreSequenceLength = sceneTimeline.length;
 
-const productionTheatreState = productionTheatreStateJson as __UNSTABLE_Project_OnDiskState;
+const productionTheatreState = (
+  window.MerchMonkWebflow?.theatreState ?? productionTheatreStateJson
+) as __UNSTABLE_Project_OnDiskState;
 
 export const theatreProject = getProject(
   theatreProjectId,

@@ -5,6 +5,7 @@ import { WebflowExperience } from "./WebflowExperience";
 import { getScrollRuntime } from "./three/scrollRuntime";
 import "./webflow.css";
 import type { ProductCupColorKey } from "./components/StorySections";
+import type { __UNSTABLE_Project_OnDiskState } from "@theatre/core";
 
 export type MerchMonkReadyDetail = {
   canvasElement: HTMLElement;
@@ -18,6 +19,9 @@ type MerchMonkWebflowConfig = {
   preferLocal?: boolean;
   productColor?: ProductCupColorKey;
   modelUrl?: string;
+  theatreState?: __UNSTABLE_Project_OnDiskState;
+  theatreStateUrl?: string;
+  theatreStateTimeoutMs?: number;
   editor?: boolean;
   onReady?: (detail: MerchMonkReadyDetail) => void;
 };

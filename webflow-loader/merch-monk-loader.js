@@ -11,6 +11,7 @@
   var preferLocal = config.preferLocal !== false;
   var editorRequested = new URLSearchParams(window.location.search).get("editor") === "true";
   var loaded = false;
+  var productionLoading = false;
   var hasCustomEditor = typeof config.editor === "boolean";
   var hasCustomModelUrl = Boolean(config.modelUrl);
 
@@ -53,14 +54,65 @@
     return script;
   }
 
+  function isValidTheatreState(state) {
+    return Boolean(
+      state &&
+      typeof state === "object" &&
+      typeof state.definitionVersion === "string" &&
+      state.sheetsById &&
+      typeof state.sheetsById === "object"
+    );
+  }
+
   function loadProduction() {
-    if (loaded) return;
-    loaded = true;
+    if (loaded || productionLoading) return;
+    productionLoading = true;
     ensureProcessEnv("production");
     if (!hasCustomEditor) config.editor = editorRequested;
     if (!hasCustomModelUrl) config.modelUrl = normalizedProductionBase + "models/merch_monk_website.glb";
     appendCss(productionCss);
-    appendModule(productionEntry);
+
+    if (config.theatreState && !isValidTheatreState(config.theatreState)) {
+      console.warn("[Merch Monk] Invalid inline Theatre state. Using URL or bundled fallback.");
+      delete config.theatreState;
+    }
+
+    function startProductionModule() {
+      productionLoading = false;
+      if (loaded) return;
+      loaded = true;
+      appendModule(productionEntry);
+    }
+
+    if (config.theatreState || !config.theatreStateUrl) {
+      startProductionModule();
+      return;
+    }
+
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    var timeoutId = window.setTimeout(function () {
+      if (controller) controller.abort();
+    }, config.theatreStateTimeoutMs || 6000);
+
+    fetch(config.theatreStateUrl, {
+      cache: "no-store",
+      signal: controller ? controller.signal : undefined,
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      })
+      .then(function (state) {
+        if (!isValidTheatreState(state)) throw new Error("Invalid Theatre state JSON");
+        config.theatreState = state;
+      })
+      .catch(function (error) {
+        console.warn("[Merch Monk] Could not load external Theatre state. Using bundled fallback.", error);
+      })
+      .then(function () {
+        window.clearTimeout(timeoutId);
+        startProductionModule();
+      });
   }
 
   function loadLocal() {
