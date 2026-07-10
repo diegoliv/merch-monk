@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { breakpointPreviewRanges, breakpointPreviewSizes, resolveBreakpointMode } from "./three/breakpoints";
 import { GlobalSceneCanvas } from "./three/GlobalSceneCanvas";
 import { SceneEditor } from "./three/SceneEditor";
 import { editorStore, useEditorStore } from "./three/editorStore";
-import { productCupColors, type ProductCupColorKey } from "./components/StorySections";
+import { productCupColors, type ProductCupColorKey, type ProductCupColorValue, type ProductCupDecorationMethod } from "./components/StorySections";
 import type { ExperienceRuntime } from "./experienceRuntime";
 import type { Breakpoint } from "./three/types";
 
@@ -11,6 +11,7 @@ type WebflowExperienceProps = {
   runtime: ExperienceRuntime;
   productColor?: ProductCupColorKey;
   showEditor?: boolean;
+  onSceneReady?: () => void;
 };
 
 type PreviewSize = {
@@ -24,6 +25,27 @@ const previewClass = "merch-monk-previewing";
 const editorActiveClass = "merch-monk-editor-active";
 const bodyEditorActiveClass = "merch-monk-webflow-editing";
 const previewHeightRange = { minHeight: 360, maxHeight: 1800 };
+const productCupDarkColors: Record<string, string> = {
+  "#ff4a09": "#9f3000",
+  "#f5f3c9": "#c9c6a8",
+  "#5ba3fc": "#1f63ad",
+  "#111111": "#020202",
+};
+const decorationMethods = new Set<ProductCupDecorationMethod>(["print", "engraved", "digital"]);
+
+function normalizeHexColor(value: string | null) {
+  const color = value?.trim().toLowerCase();
+  return color && /^#[0-9a-f]{6}$/i.test(color) ? color : null;
+}
+
+function resolveProductCupColor(color: string, fallback: ProductCupColorValue): ProductCupColorValue {
+  const normalized = normalizeHexColor(color);
+  if (!normalized) return fallback;
+  return {
+    color: normalized,
+    darkColor: productCupDarkColors[normalized] ?? fallback.darkColor,
+  };
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -56,16 +78,60 @@ function getInitialPreviewSize(breakpoint: Breakpoint): PreviewSize {
   };
 }
 
-export function WebflowExperience({ runtime, productColor = "orange", showEditor = false }: WebflowExperienceProps) {
+export function WebflowExperience({ runtime, productColor = "orange", showEditor = false, onSceneReady }: WebflowExperienceProps) {
   const editor = useEditorStore();
-  const activeColor = useMemo(
+  const configuredColor = useMemo(
     () => productCupColors.find((color) => color.key === productColor) ?? productCupColors[0],
     [productColor],
   );
+  const [productCupColor, setProductCupColor] = useState<ProductCupColorValue>(() => {
+    const activeSwatch = document.querySelector<HTMLElement>("[data-cup-color].is-active");
+    return resolveProductCupColor(activeSwatch?.dataset.cupColor ?? configuredColor.color, configuredColor);
+  });
+  const [productCupArtworkUrl, setProductCupArtworkUrl] = useState<string | null>(null);
+  const [productCupDecorationMethod, setProductCupDecorationMethod] = useState<ProductCupDecorationMethod>("digital");
+  const hasUploadedArtworkRef = useRef(false);
   const pageElement = runtime.pageElement;
   const activeBreakpoint = resolveBreakpointMode(editor.breakpointMode, "desktop");
   const isPreviewingBreakpoint = showEditor && editor.enabled;
   const [previewSize, setPreviewSize] = useState<PreviewSize>(() => getInitialPreviewSize(activeBreakpoint));
+
+  useEffect(() => {
+    function handleProductCupClick(event: MouseEvent) {
+      if (!(event.target instanceof Element)) return;
+      const control = event.target.closest<HTMLElement>("[data-cup-logo-add], [data-decoration-method], [data-cup-color]");
+      if (!control) return;
+
+      const artworkUrl = control.dataset.cupLogoAdd?.trim();
+      if (artworkUrl) {
+        if (hasUploadedArtworkRef.current) return;
+        hasUploadedArtworkRef.current = true;
+        setProductCupArtworkUrl(artworkUrl);
+        control.classList.add("is-uploaded");
+        control.dataset.cupLogoState = "uploaded";
+        return;
+      }
+
+      const decorationMethod = control.dataset.decorationMethod as ProductCupDecorationMethod | undefined;
+      if (decorationMethod && decorationMethods.has(decorationMethod)) {
+        setProductCupDecorationMethod(decorationMethod);
+        document.querySelectorAll<HTMLElement>("[data-decoration-method]").forEach((option) => {
+          option.classList.toggle("is-active", option === control);
+        });
+        return;
+      }
+
+      const color = normalizeHexColor(control.dataset.cupColor ?? null);
+      if (!color) return;
+      setProductCupColor(resolveProductCupColor(color, configuredColor));
+      document.querySelectorAll<HTMLElement>("[data-cup-color]").forEach((option) => {
+        option.classList.toggle("is-active", option === control);
+      });
+    }
+
+    document.addEventListener("click", handleProductCupClick);
+    return () => document.removeEventListener("click", handleProductCupClick);
+  }, [configuredColor]);
 
   useEffect(() => {
     if (editor.breakpointMode === "auto") {
@@ -173,7 +239,12 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
 
   return (
     <>
-      <GlobalSceneCanvas productCupColor={activeColor} />
+      <GlobalSceneCanvas
+        productCupColor={productCupColor}
+        productCupArtworkUrl={productCupArtworkUrl}
+        productCupDecorationMethod={productCupDecorationMethod}
+        onReady={onSceneReady}
+      />
       {isPreviewingBreakpoint ? (
         <div className="merch-monk-resize-handles" aria-hidden="true">
           <button className="merch-monk-resize-handle is-left" type="button" tabIndex={-1} onPointerDown={(event) => startResize("left", event)} />

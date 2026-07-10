@@ -6,6 +6,12 @@ import { getScrollRuntime } from "./three/scrollRuntime";
 import "./webflow.css";
 import type { ProductCupColorKey } from "./components/StorySections";
 
+export type MerchMonkReadyDetail = {
+  canvasElement: HTMLElement;
+  pageElement: HTMLElement | null;
+  readyAt: number;
+};
+
 type MerchMonkWebflowConfig = {
   canvasSelector?: string;
   pageSelector?: string;
@@ -13,11 +19,16 @@ type MerchMonkWebflowConfig = {
   productColor?: ProductCupColorKey;
   modelUrl?: string;
   editor?: boolean;
+  onReady?: (detail: MerchMonkReadyDetail) => void;
 };
 
 declare global {
   interface Window {
     MerchMonkWebflow?: MerchMonkWebflowConfig;
+  }
+
+  interface WindowEventMap {
+    "merch-monk:ready": CustomEvent<MerchMonkReadyDetail>;
   }
 }
 
@@ -34,20 +45,46 @@ function mountWebflowExperience() {
     return;
   }
 
-  canvasElement.classList.add("merch-monk-canvas-host");
+  const canvasHost = canvasElement;
+  canvasHost.classList.add("merch-monk-canvas-host");
 
-  const root = ReactDOM.createRoot(canvasElement);
+  const root = ReactDOM.createRoot(canvasHost);
   const runtime = {
     mode: "webflow" as const,
-    canvasElement,
+    canvasElement: canvasHost,
     pageElement,
     previewScrollerSelector: `${pageSelector}.merch-monk-previewing`,
   };
+  let hasSignalledReady = false;
+
+  function handleSceneReady() {
+    if (hasSignalledReady) return;
+    hasSignalledReady = true;
+
+    const detail: MerchMonkReadyDetail = {
+      canvasElement: canvasHost,
+      pageElement,
+      readyAt: performance.now(),
+    };
+    canvasHost.classList.add("is-ready");
+    canvasHost.dataset.merchMonkReady = "true";
+    window.dispatchEvent(new CustomEvent("merch-monk:ready", { detail }));
+    try {
+      config.onReady?.(detail);
+    } catch (error) {
+      console.error("[Merch Monk] onReady callback failed.", error);
+    }
+  }
 
   root.render(
     <React.StrictMode>
       <ExperienceRuntimeProvider value={runtime}>
-        <WebflowExperience runtime={runtime} productColor={config.productColor} showEditor={config.editor === true} />
+        <WebflowExperience
+          runtime={runtime}
+          productColor={config.productColor}
+          showEditor={config.editor === true}
+          onSceneReady={handleSceneReady}
+        />
       </ExperienceRuntimeProvider>
     </React.StrictMode>,
   );

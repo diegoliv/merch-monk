@@ -7,17 +7,20 @@ import { breakpointPreviewSizes, resolveBreakpointMode } from "./breakpoints";
 import { anchorToWorld, applyViewport, getWorldSize } from "./math";
 import { boxChildObjectIds, objectIds, renderObjectIds } from "./sceneObjects";
 import { editorStore, useEditorStore } from "./editorStore";
-import { getTheatreObject, getTheatreObjects, type TheatreObjectValue, valueToSceneState } from "./theatreProject";
+import { getTheatreObject, getTheatreObjects, theatreProject, type TheatreObjectValue, valueToSceneState } from "./theatreProject";
 import { selectTheatreObject, setTheatreObjectValue } from "./theatreStudio";
 import { useSceneProgress } from "./useSceneProgress";
 import { useViewportInfo } from "./useViewportInfo";
-import type { ProductCupColor } from "../components/StorySections";
+import type { ProductCupColorValue, ProductCupDecorationMethod } from "../components/StorySections";
 import { useExperienceRuntime } from "../experienceRuntime";
 import type { AppliedSceneState, BoxChildObjectId, Breakpoint, ObjectId } from "./types";
 
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
 const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones", product_cup: "cup" };
 const boxAnimationNames = new Set(["box_open"]);
+const entranceObjectIds: ObjectId[] = renderObjectIds.filter((id) => id !== "box" && id !== "product_cup");
+const entranceDuration = 0.55;
+const entranceStagger = 0.05;
 
 type TheatreValues = Record<ObjectId, TheatreObjectValue>;
 type BoxChildValues = Record<BoxChildObjectId, TheatreObjectValue>;
@@ -228,7 +231,17 @@ function setOpacity(materials: THREE.Material[], opacity: number) {
   });
 }
 
-function applyProductCupMaterial(object: THREE.Object3D, productCupColor: ProductCupColor) {
+function isProductCupMainMaterial(name: string) {
+  return (name.includes("orange") && !name.includes("dark")) || name.includes("cup.uv");
+}
+
+function applyProductCupMaterial(
+  object: THREE.Object3D,
+  productCupColor: ProductCupColorValue,
+  decorationMethod: ProductCupDecorationMethod,
+  colorTexture: THREE.CanvasTexture | null = null,
+  bumpTexture: THREE.CanvasTexture | null = null,
+) {
   object.traverse((child) => {
     if (!("material" in child)) return;
     const mesh = child as THREE.Mesh;
@@ -240,14 +253,80 @@ function applyProductCupMaterial(object: THREE.Object3D, productCupColor: Produc
       const name = material.name.toLowerCase().replace(/[_\s]/g, ".");
       if (name.includes("orange.dark")) {
         pbr.color.set(productCupColor.darkColor);
-      } else if (name.includes("orange") || name.includes("cup.uv")) {
-        pbr.color.set(productCupColor.color);
+        pbr.map = null;
+        pbr.bumpMap = null;
+        pbr.bumpScale = 0;
+      } else if (isProductCupMainMaterial(name)) {
+        pbr.color.set(colorTexture ? "#ffffff" : productCupColor.color);
+        pbr.map = colorTexture;
+        pbr.bumpMap = bumpTexture;
+        pbr.bumpScale = bumpTexture ? -0.018 : 0;
       }
-      if ("roughness" in pbr) pbr.roughness = Math.max(pbr.roughness ?? 0, 0.62);
-      if ("metalness" in pbr) pbr.metalness = Math.min(pbr.metalness ?? 0, 0.08);
+      pbr.roughness = decorationMethod === "engraved" ? 0.78 : decorationMethod === "print" ? 0.72 : 0.62;
+      pbr.metalness = Math.min(pbr.metalness ?? 0, 0.08);
       material.needsUpdate = true;
     });
   });
+}
+
+function createTintedArtworkCanvas(image: HTMLImageElement, color: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.drawImage(image, 0, 0);
+  context.globalCompositeOperation = "source-in";
+  context.fillStyle = color;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.globalCompositeOperation = "source-over";
+  return canvas;
+}
+
+function createProductCupArtworkTextures(
+  image: HTMLImageElement,
+  productCupColor: ProductCupColorValue,
+  decorationMethod: ProductCupDecorationMethod,
+) {
+  const colorCanvas = document.createElement("canvas");
+  colorCanvas.width = image.naturalWidth;
+  colorCanvas.height = image.naturalHeight;
+  const colorContext = colorCanvas.getContext("2d");
+  const artworkCanvas = createTintedArtworkCanvas(
+    image,
+    decorationMethod === "engraved" ? productCupColor.darkColor : "#ffffff",
+  );
+  if (!colorContext || !artworkCanvas) return null;
+
+  colorContext.fillStyle = productCupColor.color;
+  colorContext.fillRect(0, 0, colorCanvas.width, colorCanvas.height);
+  colorContext.drawImage(artworkCanvas, 0, 0);
+
+  const colorTexture = new THREE.CanvasTexture(colorCanvas);
+  colorTexture.colorSpace = THREE.SRGBColorSpace;
+  colorTexture.flipY = false;
+  colorTexture.needsUpdate = true;
+
+  let bumpTexture: THREE.CanvasTexture | null = null;
+  if (decorationMethod === "engraved") {
+    const bumpCanvas = document.createElement("canvas");
+    bumpCanvas.width = image.naturalWidth;
+    bumpCanvas.height = image.naturalHeight;
+    const bumpContext = bumpCanvas.getContext("2d");
+    const bumpArtwork = createTintedArtworkCanvas(image, "#ffffff");
+    if (bumpContext && bumpArtwork) {
+      bumpContext.fillStyle = "#000000";
+      bumpContext.fillRect(0, 0, bumpCanvas.width, bumpCanvas.height);
+      bumpContext.drawImage(bumpArtwork, 0, 0);
+      bumpTexture = new THREE.CanvasTexture(bumpCanvas);
+      bumpTexture.colorSpace = THREE.NoColorSpace;
+      bumpTexture.flipY = false;
+      bumpTexture.needsUpdate = true;
+    }
+  }
+
+  return { colorTexture, bumpTexture };
 }
 function applyBoxChildStates(
   root: THREE.Object3D,
@@ -300,12 +379,17 @@ type MerchObjectProps = {
   hoverTiltY: number;
   hoverFollow: number;
   hoverRange: number;
-  productCupColor: ProductCupColor;
+  productCupColor: ProductCupColorValue;
+  productCupArtworkUrl: string | null;
+  productCupDecorationMethod: ProductCupDecorationMethod;
   setSelectedRef: (instance: THREE.Object3D | null) => void;
   activeBreakpoint: Breakpoint;
+  entranceEnabled: boolean;
+  entranceIndex: number;
+  entranceStartRef: MutableRefObject<number | null>;
 };
 
-function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, setSelectedRef, activeBreakpoint }: MerchObjectProps) {
+function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
   const { scene, animations } = useGLTF(modelPath);
   const { camera, size } = useThree();
   const groupRef = useRef<THREE.Group | null>(null);
@@ -358,10 +442,51 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
   }, [id, object]);
   useEffect(() => {
     if (id !== "product_cup" || !object) return;
-    applyProductCupMaterial(object, productCupColor);
-  }, [id, object, productCupColor]);
 
-  function applyState(float = 0, tilt = tiltRef.current) {
+    let cancelled = false;
+    let colorTexture: THREE.CanvasTexture | null = null;
+    let bumpTexture: THREE.CanvasTexture | null = null;
+    applyProductCupMaterial(object, productCupColor, productCupDecorationMethod);
+
+    if (!productCupArtworkUrl) return;
+
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.decoding = "async";
+    image.onload = () => {
+      if (cancelled) return;
+      const textures = createProductCupArtworkTextures(image, productCupColor, productCupDecorationMethod);
+      if (!textures) return;
+      colorTexture = textures.colorTexture;
+      bumpTexture = textures.bumpTexture;
+      applyProductCupMaterial(object, productCupColor, productCupDecorationMethod, colorTexture, bumpTexture);
+    };
+    image.onerror = () => {
+      if (!cancelled) console.warn(`[Merch Monk] Could not load product cup artwork: ${productCupArtworkUrl}`);
+    };
+    image.src = productCupArtworkUrl;
+
+    return () => {
+      cancelled = true;
+      image.onload = null;
+      image.onerror = null;
+      object.traverse((child) => {
+        if (!("material" in child)) return;
+        const mesh = child as THREE.Mesh;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        materials.forEach((material) => {
+          const pbr = material as THREE.MeshStandardMaterial;
+          if (pbr.map === colorTexture) pbr.map = null;
+          if (pbr.bumpMap === bumpTexture) pbr.bumpMap = null;
+          material.needsUpdate = true;
+        });
+      });
+      colorTexture?.dispose();
+      bumpTexture?.dispose();
+    };
+  }, [id, object, productCupArtworkUrl, productCupColor, productCupDecorationMethod]);
+
+  function applyState(float = 0, tilt = tiltRef.current, entranceScale = 1) {
     if (!groupRef.current) return;
     const state = appliedRef.current[id];
     if (!state) return;
@@ -371,7 +496,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     globalTiltEulerRef.current.set(tilt.x, tilt.y, 0, "XYZ");
     globalTiltQuaternionRef.current.setFromEuler(globalTiltEulerRef.current);
     groupRef.current.quaternion.copy(baseQuaternionRef.current).premultiply(globalTiltQuaternionRef.current);
-    groupRef.current.scale.setScalar(state.scale);
+    groupRef.current.scale.setScalar(state.scale * entranceScale);
     groupRef.current.visible = state.visible && state.opacity > 0.01;
     if (object) {
       if (!Number.isFinite(lastOpacityRef.current) || Math.abs(lastOpacityRef.current - state.opacity) > 0.0001) {
@@ -432,6 +557,12 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     const state = appliedRef.current[id];
     if (!state) return;
     const pointerState = pointerStateRef.current;
+    const entranceStart = entranceStartRef.current;
+    const entranceElapsed = entranceStart === null ? 0 : clock.elapsedTime - entranceStart - entranceIndex * entranceStagger;
+    const entranceProgress = entranceEnabled
+      ? THREE.MathUtils.clamp(entranceElapsed / entranceDuration, 0, 1)
+      : 1;
+    const entranceScale = 1 - Math.pow(1 - entranceProgress, 3);
     pointerRef.current.set((pointerState.clientX / size.width) * 2 - 1, -(pointerState.clientY / size.height) * 2 + 1);
 
     if (id === "box" && mixerRef.current && boxActionRef.current && boxAnimationClip) {
@@ -446,7 +577,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
 
     if (lockMotion) {
       tiltRef.current.lerp(targetTiltRef.current.set(0, 0), 0.18);
-      applyState(0, tiltRef.current);
+      applyState(0, tiltRef.current, entranceScale);
       return;
     }
 
@@ -479,7 +610,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     }
 
     tiltRef.current.lerp(targetTiltRef.current, hoverFollow);
-    applyState(float, tiltRef.current);
+    applyState(float, tiltRef.current, entranceScale);
   });
 
   if (!object) return null;
@@ -516,10 +647,48 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
 }
 
 type SceneContentProps = {
-  productCupColor: ProductCupColor;
+  productCupColor: ProductCupColorValue;
+  productCupArtworkUrl?: string | null;
+  productCupDecorationMethod?: ProductCupDecorationMethod;
+  onReady?: () => void;
 };
 
-function SceneContent({ productCupColor }: SceneContentProps) {
+function SceneReadinessController({ entranceStartRef, onReady }: {
+  entranceStartRef: MutableRefObject<number | null>;
+  onReady?: () => void;
+}) {
+  const theatreReadyRef = useRef(false);
+  const completedFramesRef = useRef(0);
+  const signalledRef = useRef(false);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+
+  useEffect(() => {
+    let cancelled = false;
+    void theatreProject.ready.then(() => {
+      if (!cancelled) theatreReadyRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useFrame(({ clock }) => {
+    if (!theatreReadyRef.current || signalledRef.current) return;
+    if (completedFramesRef.current < 1) {
+      completedFramesRef.current += 1;
+      return;
+    }
+
+    signalledRef.current = true;
+    entranceStartRef.current = clock.elapsedTime;
+    onReadyRef.current?.();
+  });
+
+  return null;
+}
+
+function SceneContent({ productCupColor, productCupArtworkUrl = null, productCupDecorationMethod = "digital", onReady }: SceneContentProps) {
   const performanceDebug = getPerformanceDebug();
   if (performanceDebug) performanceDebug.sceneRenders += 1;
   const runtime = useExperienceRuntime();
@@ -546,6 +715,8 @@ function SceneContent({ productCupColor }: SceneContentProps) {
     return result;
   }, {} as AppliedSceneState));
   const pointerStateRef = useRef<PointerState>({ clientX: 0, clientY: 0, active: false, scrolling: false });
+  const entranceStartRef = useRef<number | null>(null);
+  const entranceEnabled = runtime.mode === "webflow" && !editor.enabled;
 
   useEffect(() => {
     const objects = getTheatreObjects(activeBreakpoint);
@@ -654,6 +825,7 @@ function SceneContent({ productCupColor }: SceneContentProps) {
 
   return (
     <>
+      <SceneReadinessController entranceStartRef={entranceStartRef} onReady={onReady} />
       <OrthographicCamera
         makeDefault
         position={[0, 0, 12]}
@@ -677,8 +849,13 @@ function SceneContent({ productCupColor }: SceneContentProps) {
           hoverFollow={editor.hoverFollow}
           hoverRange={editor.hoverRange}
           productCupColor={productCupColor}
+          productCupArtworkUrl={productCupArtworkUrl}
+          productCupDecorationMethod={productCupDecorationMethod}
           setSelectedRef={setSelectedObject}
           activeBreakpoint={activeBreakpoint}
+          entranceEnabled={entranceEnabled && entranceObjectIds.includes(id)}
+          entranceIndex={Math.max(0, entranceObjectIds.indexOf(id))}
+          entranceStartRef={entranceStartRef}
         />
       ))}
       {editor.enabled && selectedObject && (renderObjectIds.includes(editor.selectedObject) || isBoxChildObjectId(editor.selectedObject)) ? (
@@ -689,10 +866,13 @@ function SceneContent({ productCupColor }: SceneContentProps) {
 }
 
 type GlobalSceneCanvasProps = {
-  productCupColor: ProductCupColor;
+  productCupColor: ProductCupColorValue;
+  productCupArtworkUrl?: string | null;
+  productCupDecorationMethod?: ProductCupDecorationMethod;
+  onReady?: () => void;
 };
 
-export function GlobalSceneCanvas({ productCupColor }: GlobalSceneCanvasProps) {
+export function GlobalSceneCanvas({ productCupColor, productCupArtworkUrl = null, productCupDecorationMethod = "digital", onReady }: GlobalSceneCanvasProps) {
   const editor = useEditorStore();
   const runtime = useExperienceRuntime();
 
@@ -709,7 +889,12 @@ export function GlobalSceneCanvas({ productCupColor }: GlobalSceneCanvasProps) {
       >
         {performanceDebugEnabled ? <PerformanceProbe /> : null}
         <Suspense fallback={null}>
-          <SceneContent productCupColor={productCupColor} />
+          <SceneContent
+            productCupColor={productCupColor}
+            productCupArtworkUrl={productCupArtworkUrl}
+            productCupDecorationMethod={productCupDecorationMethod}
+            onReady={onReady}
+          />
         </Suspense>
       </Canvas>
     </div>

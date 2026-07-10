@@ -8,12 +8,17 @@ type SectionProps = {
 
 export type ProductCupColorKey = "orange" | "white" | "blue" | "black";
 
-export type ProductCupColor = {
-  key: ProductCupColorKey;
-  label: string;
+export type ProductCupColorValue = {
   color: string;
   darkColor: string;
 };
+
+export type ProductCupColor = ProductCupColorValue & {
+  key: ProductCupColorKey;
+  label: string;
+};
+
+export type ProductCupDecorationMethod = "print" | "engraved" | "digital";
 
 export const productCupColors: ProductCupColor[] = [
   { key: "orange", label: "Orange", color: "#ff4a09", darkColor: "#9f3000" },
