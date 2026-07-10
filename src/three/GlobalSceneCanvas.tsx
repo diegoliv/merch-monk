@@ -374,7 +374,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     groupRef.current.scale.setScalar(state.scale);
     groupRef.current.visible = state.visible && state.opacity > 0.01;
     if (object) {
-      if (Math.abs(lastOpacityRef.current - state.opacity) > 0.0001) {
+      if (!Number.isFinite(lastOpacityRef.current) || Math.abs(lastOpacityRef.current - state.opacity) > 0.0001) {
         setOpacity(materials, state.opacity);
         lastOpacityRef.current = state.opacity;
       }
@@ -436,7 +436,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
 
     if (id === "box" && mixerRef.current && boxActionRef.current && boxAnimationClip) {
       const progress = THREE.MathUtils.clamp(theatreValuesRef.current.box.boxAnimationProgress ?? 0, 0, 1);
-      if (Math.abs(lastAnimationProgressRef.current - progress) > 0.0001) {
+      if (!Number.isFinite(lastAnimationProgressRef.current) || Math.abs(lastAnimationProgressRef.current - progress) > 0.0001) {
         const duration = boxAnimationClip.duration;
         boxActionRef.current.time = progress >= 1 ? Math.max(0, duration - 0.0001) : progress * duration;
         mixerRef.current.update(0);
