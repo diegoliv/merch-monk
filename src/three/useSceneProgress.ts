@@ -1,33 +1,19 @@
-import { useEffect, useState } from "react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useEffect } from "react";
 import { useExperienceRuntime } from "../experienceRuntime";
-import { editorStore, useEditorStore } from "./editorStore";
+import { useEditorStore } from "./editorStore";
 import { sceneTimeline } from "./sceneTimeline";
+import { getScrollRuntime } from "./scrollRuntime";
 import { getTheatreSheet } from "./theatreProject";
 import type { Breakpoint } from "./types";
-
-gsap.registerPlugin(ScrollTrigger);
-
-type SceneProgress = {
-  progress: number;
-  activeStepId: string;
-};
-
-const initialProgress: SceneProgress = {
-  progress: 0,
-  activeStepId: "hero",
-};
 
 let latestSequencePosition = 0;
 
 export function useSceneProgress(activeBreakpoint: Breakpoint) {
   const editor = useEditorStore();
   const runtime = useExperienceRuntime();
-  const [progress, setProgress] = useState(initialProgress);
-
   useEffect(() => {
-    const triggers: ScrollTrigger[] = [];
+    const { ScrollTrigger } = getScrollRuntime();
+    const triggers: Array<{ kill: () => void }> = [];
     const sheet = getTheatreSheet(activeBreakpoint);
     const scroller = editor.breakpointMode === "auto"
       ? undefined
@@ -45,16 +31,10 @@ export function useSceneProgress(activeBreakpoint: Breakpoint) {
         end: "bottom top",
         scrub: true,
         markers: editor.markers,
-        onEnter: (self) => setProgress({ activeStepId: step.id, progress: self.progress }),
-        onEnterBack: (self) => setProgress({ activeStepId: step.id, progress: self.progress }),
         onUpdate: (self) => {
           const sequencePosition = index + self.progress;
           latestSequencePosition = sequencePosition;
           sheet.sequence.position = sequencePosition;
-          if (self.isActive) {
-            setProgress({ activeStepId: step.id, progress: self.progress });
-            if (editor.enabled) editorStore.setSelection({ selectedObject: editor.selectedObject });
-          }
         },
       });
 
@@ -66,7 +46,5 @@ export function useSceneProgress(activeBreakpoint: Breakpoint) {
     return () => {
       triggers.forEach((trigger) => trigger.kill());
     };
-  }, [activeBreakpoint, editor.breakpointMode, editor.markers, editor.enabled, editor.selectedObject, runtime.previewScrollerSelector]);
-
-  return progress;
+  }, [activeBreakpoint, editor.breakpointMode, editor.markers, runtime.previewScrollerSelector]);
 }

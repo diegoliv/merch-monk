@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { ExperienceRuntimeProvider } from "./experienceRuntime";
 import { WebflowExperience } from "./WebflowExperience";
+import { getScrollRuntime } from "./three/scrollRuntime";
 import "./webflow.css";
 import type { ProductCupColorKey } from "./components/StorySections";
 
@@ -21,6 +22,7 @@ declare global {
 }
 
 function mountWebflowExperience() {
+  getScrollRuntime();
   const config = window.MerchMonkWebflow ?? {};
   const canvasSelector = config.canvasSelector ?? ".canvas-layer_middle";
   const pageSelector = config.pageSelector ?? ".page-wrapper";

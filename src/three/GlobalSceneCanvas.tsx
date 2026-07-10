@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, OrthographicCamera, TransformControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -21,6 +21,81 @@ const boxAnimationNames = new Set(["box_open"]);
 
 type TheatreValues = Record<ObjectId, TheatreObjectValue>;
 type BoxChildValues = Record<BoxChildObjectId, TheatreObjectValue>;
+type PointerState = { clientX: number; clientY: number; active: boolean; scrolling: boolean };
+type PerformanceDebug = {
+  frames: number;
+  totalFrameMs: number;
+  worstFrameMs: number;
+  framesOver20Ms: number;
+  framesOver50Ms: number;
+  theatreUpdates: number;
+  sceneRenders: number;
+  reset: () => void;
+  snapshot: () => Record<string, number>;
+};
+
+const performanceDebugEnabled = new URLSearchParams(window.location.search).has("perf");
+
+function getPerformanceDebug() {
+  return (window as typeof window & { __MERCH_MONK_PERF__?: PerformanceDebug }).__MERCH_MONK_PERF__;
+}
+
+function PerformanceProbe() {
+  useEffect(() => {
+    if (!performanceDebugEnabled) return;
+    const debug: PerformanceDebug = {
+      frames: 0,
+      totalFrameMs: 0,
+      worstFrameMs: 0,
+      framesOver20Ms: 0,
+      framesOver50Ms: 0,
+      theatreUpdates: 0,
+      sceneRenders: 0,
+      reset() {
+        this.frames = 0;
+        this.totalFrameMs = 0;
+        this.worstFrameMs = 0;
+        this.framesOver20Ms = 0;
+        this.framesOver50Ms = 0;
+        this.theatreUpdates = 0;
+        this.sceneRenders = 0;
+      },
+      snapshot() {
+        return {
+          frames: this.frames,
+          averageFrameMs: this.frames > 0 ? this.totalFrameMs / this.frames : 0,
+          worstFrameMs: this.worstFrameMs,
+          framesOver20Ms: this.framesOver20Ms,
+          framesOver50Ms: this.framesOver50Ms,
+          theatreUpdates: this.theatreUpdates,
+          sceneRenders: this.sceneRenders,
+        };
+      },
+    };
+    (window as typeof window & { __MERCH_MONK_PERF__?: PerformanceDebug }).__MERCH_MONK_PERF__ = debug;
+    const reportInterval = window.setInterval(() => {
+      console.info(`[Merch Monk perf] ${JSON.stringify(debug.snapshot())}`);
+      debug.reset();
+    }, 2000);
+    return () => {
+      window.clearInterval(reportInterval);
+      delete (window as typeof window & { __MERCH_MONK_PERF__?: PerformanceDebug }).__MERCH_MONK_PERF__;
+    };
+  }, []);
+
+  useFrame((_, delta) => {
+    const debug = getPerformanceDebug();
+    if (!debug) return;
+    const frameMs = delta * 1000;
+    debug.frames += 1;
+    debug.totalFrameMs += frameMs;
+    debug.worstFrameMs = Math.max(debug.worstFrameMs, frameMs);
+    if (frameMs > 20) debug.framesOver20Ms += 1;
+    if (frameMs > 50) debug.framesOver50Ms += 1;
+  });
+
+  return null;
+}
 type RestTransform = {
   position: THREE.Vector3;
   quaternion: THREE.Quaternion;
@@ -132,18 +207,24 @@ function createBoxAnimationClip(root: THREE.Object3D, animations: THREE.Animatio
 
   return tracks.length > 0 ? new THREE.AnimationClip("box_combined", -1, tracks) : null;
 }
-function setOpacity(object: THREE.Object3D, opacity: number) {
+function collectMaterials(object: THREE.Object3D) {
+  const materials: THREE.Material[] = [];
   object.traverse((child) => {
     if (!("material" in child)) return;
     const mesh = child as THREE.Mesh;
-    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-
-    materials.forEach((material) => {
-      if (!material) return;
-      material.transparent = opacity < 0.999;
-      material.opacity = opacity;
-      material.depthWrite = opacity > 0.5;
+    const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    meshMaterials.forEach((material) => {
+      if (material && !materials.includes(material)) materials.push(material);
     });
+  });
+  return materials;
+}
+
+function setOpacity(materials: THREE.Material[], opacity: number) {
+  materials.forEach((material) => {
+    material.transparent = opacity < 0.999;
+    material.opacity = opacity;
+    material.depthWrite = opacity > 0.5;
   });
 }
 
@@ -168,7 +249,15 @@ function applyProductCupMaterial(object: THREE.Object3D, productCupColor: Produc
     });
   });
 }
-function applyBoxChildStates(root: THREE.Object3D, childValues: BoxChildValues, restTransforms: Partial<Record<BoxChildObjectId, RestTransform>>, parentOpacity: number) {
+function applyBoxChildStates(
+  root: THREE.Object3D,
+  childValues: BoxChildValues,
+  restTransforms: Partial<Record<BoxChildObjectId, RestTransform>>,
+  childMaterials: Partial<Record<BoxChildObjectId, THREE.Material[]>>,
+  parentOpacity: number,
+  rotationEuler: THREE.Euler,
+  rotationQuaternion: THREE.Quaternion,
+) {
   boxChildObjectIds.forEach((childId) => {
     const target = root.getObjectByName(childId);
     const rest = restTransforms[childId];
@@ -181,12 +270,13 @@ function applyBoxChildStates(root: THREE.Object3D, childValues: BoxChildValues, 
       rest.position.z + value.position.z,
     );
 
-    const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(value.rotation.x, value.rotation.y, value.rotation.z, "XYZ"));
-    target.quaternion.copy(rest.quaternion).multiply(rotation);
+    rotationEuler.set(value.rotation.x, value.rotation.y, value.rotation.z, "XYZ");
+    rotationQuaternion.setFromEuler(rotationEuler);
+    target.quaternion.copy(rest.quaternion).multiply(rotationQuaternion);
     target.scale.set(rest.scale.x * value.scale, rest.scale.y * value.scale, rest.scale.z * value.scale);
     const opacity = value.opacity * parentOpacity;
     target.visible = value.visible && opacity > 0.01;
-    setOpacity(target, opacity);
+    setOpacity(childMaterials[childId] ?? [], opacity);
   });
 }
 function initialTheatreValues(breakpoint: Breakpoint): TheatreValues {
@@ -200,8 +290,9 @@ function initialTheatreValues(breakpoint: Breakpoint): TheatreValues {
 
 type MerchObjectProps = {
   id: ObjectId;
-  state: AppliedSceneState[ObjectId];
-  selected: boolean;
+  appliedRef: MutableRefObject<AppliedSceneState>;
+  theatreValuesRef: MutableRefObject<TheatreValues>;
+  pointerStateRef: MutableRefObject<PointerState>;
   lockMotion: boolean;
   selectedObjectId: ObjectId;
   editorEnabled: boolean;
@@ -209,19 +300,16 @@ type MerchObjectProps = {
   hoverTiltY: number;
   hoverFollow: number;
   hoverRange: number;
-  animationProgress: number;
-  childValues: BoxChildValues;
   productCupColor: ProductCupColor;
   setSelectedRef: (instance: THREE.Object3D | null) => void;
   activeBreakpoint: Breakpoint;
 };
 
-function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, animationProgress, childValues, productCupColor, setSelectedRef, activeBreakpoint }: MerchObjectProps) {
+function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, setSelectedRef, activeBreakpoint }: MerchObjectProps) {
   const { scene, animations } = useGLTF(modelPath);
   const { camera, size } = useThree();
   const groupRef = useRef<THREE.Group | null>(null);
   const pointerRef = useRef(new THREE.Vector2());
-  const pointerActiveRef = useRef(false);
   const raycasterRef = useRef(new THREE.Raycaster());
   const tiltRef = useRef(new THREE.Vector2());
   const targetTiltRef = useRef(new THREE.Vector2());
@@ -233,6 +321,11 @@ function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editor
   const boxActionRef = useRef<THREE.AnimationAction | null>(null);
   const boxRef = useRef(new THREE.Box3());
   const centerRef = useRef(new THREE.Vector3());
+  const childRotationEulerRef = useRef(new THREE.Euler());
+  const childRotationQuaternionRef = useRef(new THREE.Quaternion());
+  const lastOpacityRef = useRef(Number.NaN);
+  const lastAnimationProgressRef = useRef(Number.NaN);
+  const phase = useMemo(() => objectIds.indexOf(id) * 0.45, [id]);
   const object = useMemo(() => {
     const node = scene.getObjectByName(modelNodeNames[id] ?? id);
     return node ? cloneNode(node, id === "box") : null;
@@ -254,6 +347,15 @@ function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editor
       return transforms;
     }, {} as Partial<Record<BoxChildObjectId, RestTransform>>);
   }, [id, object]);
+  const materials = useMemo(() => (object ? collectMaterials(object) : []), [object]);
+  const boxChildMaterials = useMemo(() => {
+    if (id !== "box" || !object) return {};
+    return boxChildObjectIds.reduce((result, childId) => {
+      const child = object.getObjectByName(childId);
+      if (child) result[childId] = collectMaterials(child);
+      return result;
+    }, {} as Partial<Record<BoxChildObjectId, THREE.Material[]>>);
+  }, [id, object]);
   useEffect(() => {
     if (id !== "product_cup" || !object) return;
     applyProductCupMaterial(object, productCupColor);
@@ -261,6 +363,8 @@ function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editor
 
   function applyState(float = 0, tilt = tiltRef.current) {
     if (!groupRef.current) return;
+    const state = appliedRef.current[id];
+    if (!state) return;
     groupRef.current.position.set(state.worldPosition[0], state.worldPosition[1] + float, state.worldPosition[2]);
     baseEulerRef.current.set(state.rotation[0], state.rotation[1], state.rotation[2], "XYZ");
     baseQuaternionRef.current.setFromEuler(baseEulerRef.current);
@@ -270,8 +374,21 @@ function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editor
     groupRef.current.scale.setScalar(state.scale);
     groupRef.current.visible = state.visible && state.opacity > 0.01;
     if (object) {
-      setOpacity(object, state.opacity);
-      if (id === "box") applyBoxChildStates(object, childValues, boxChildRestTransforms, state.opacity);
+      if (Math.abs(lastOpacityRef.current - state.opacity) > 0.0001) {
+        setOpacity(materials, state.opacity);
+        lastOpacityRef.current = state.opacity;
+      }
+      if (id === "box") {
+        applyBoxChildStates(
+          object,
+          theatreValuesRef.current as BoxChildValues,
+          boxChildRestTransforms,
+          boxChildMaterials,
+          state.opacity,
+          childRotationEulerRef.current,
+          childRotationQuaternionRef.current,
+        );
+      }
     }
   }
 
@@ -311,50 +428,31 @@ function MerchObject({ id, state, selected, lockMotion, selectedObjectId, editor
     };
   }, [boxAnimationClip, object]);
 
-  useEffect(() => {
-    if (!mixerRef.current || !boxActionRef.current || !boxAnimationClip) return;
-
-    const progress = THREE.MathUtils.clamp(animationProgress, 0, 1);
-    const duration = boxAnimationClip.duration;
-    const time = progress >= 1 ? Math.max(0, duration - 0.0001) : progress * duration;
-    boxActionRef.current.time = time;
-    mixerRef.current.update(0);
-  }, [animationProgress, boxAnimationClip]);
-  useEffect(() => {
-    function handlePointerMove(event: PointerEvent) {
-      pointerRef.current.set((event.clientX / size.width) * 2 - 1, -(event.clientY / size.height) * 2 + 1);
-      pointerActiveRef.current = true;
-    }
-
-    function handlePointerLeave() {
-      pointerActiveRef.current = false;
-    }
-
-    window.addEventListener("pointermove", handlePointerMove, { passive: true });
-    window.addEventListener("pointerleave", handlePointerLeave);
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerleave", handlePointerLeave);
-    };
-  }, [size.height, size.width]);
-
-  useEffect(() => {
-    applyState(0);
-  }, [state.worldPosition[0], state.worldPosition[1], state.worldPosition[2], state.rotation[0], state.rotation[1], state.rotation[2], state.scale, state.opacity, state.visible]);
-
   useFrame(({ clock }) => {
+    const state = appliedRef.current[id];
+    if (!state) return;
+    const pointerState = pointerStateRef.current;
+    pointerRef.current.set((pointerState.clientX / size.width) * 2 - 1, -(pointerState.clientY / size.height) * 2 + 1);
+
+    if (id === "box" && mixerRef.current && boxActionRef.current && boxAnimationClip) {
+      const progress = THREE.MathUtils.clamp(theatreValuesRef.current.box.boxAnimationProgress ?? 0, 0, 1);
+      if (Math.abs(lastAnimationProgressRef.current - progress) > 0.0001) {
+        const duration = boxAnimationClip.duration;
+        boxActionRef.current.time = progress >= 1 ? Math.max(0, duration - 0.0001) : progress * duration;
+        mixerRef.current.update(0);
+        lastAnimationProgressRef.current = progress;
+      }
+    }
+
     if (lockMotion) {
       tiltRef.current.lerp(targetTiltRef.current.set(0, 0), 0.18);
       applyState(0, tiltRef.current);
       return;
     }
 
-    const phase = objectIds.indexOf(id) * 0.45;
     const float = Math.sin(clock.elapsedTime * 0.55 + phase) * 0.045;
-    applyState(float);
 
-    if (!groupRef.current || !object || !state.visible || state.opacity <= 0.08 || !pointerActiveRef.current) {
+    if (!groupRef.current || !object || !state.visible || state.opacity <= 0.08 || !pointerState.active || pointerState.scrolling) {
       targetTiltRef.current.set(0, 0);
     } else {
       groupRef.current.updateMatrixWorld();
@@ -422,6 +520,9 @@ type SceneContentProps = {
 };
 
 function SceneContent({ productCupColor }: SceneContentProps) {
+  const performanceDebug = getPerformanceDebug();
+  if (performanceDebug) performanceDebug.sceneRenders += 1;
+  const runtime = useExperienceRuntime();
   const viewport = useViewportInfo();
   const editor = useEditorStore();
   const activeBreakpoint = resolveBreakpointMode(editor.breakpointMode, viewport.breakpoint);
@@ -439,27 +540,64 @@ function SceneContent({ productCupColor }: SceneContentProps) {
   }, [activeBreakpoint, editor.breakpointMode, viewport]);
   useSceneProgress(activeBreakpoint);
   const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
-  const [theatreValues, setTheatreValues] = useState<TheatreValues>(() => initialTheatreValues(activeBreakpoint));
+  const theatreValuesRef = useRef<TheatreValues>(initialTheatreValues(activeBreakpoint));
+  const appliedRef = useRef<AppliedSceneState>(objectIds.reduce((result, id) => {
+    result[id] = applyViewport(valueToSceneState(theatreValuesRef.current[id]), activeViewport);
+    return result;
+  }, {} as AppliedSceneState));
+  const pointerStateRef = useRef<PointerState>({ clientX: 0, clientY: 0, active: false, scrolling: false });
 
   useEffect(() => {
     const objects = getTheatreObjects(activeBreakpoint);
-    setTheatreValues(initialTheatreValues(activeBreakpoint));
+    theatreValuesRef.current = initialTheatreValues(activeBreakpoint);
+    objectIds.forEach((id) => {
+      appliedRef.current[id] = applyViewport(valueToSceneState(theatreValuesRef.current[id]), activeViewport);
+    });
 
     const unsubscribers = objectIds.map((id) => objects[id].onValuesChange((value) => {
-      setTheatreValues((current) => ({ ...current, [id]: value as TheatreObjectValue }));
+      const debug = getPerformanceDebug();
+      if (debug) debug.theatreUpdates += 1;
+      theatreValuesRef.current[id] = value as TheatreObjectValue;
+      appliedRef.current[id] = applyViewport(valueToSceneState(value as TheatreObjectValue), activeViewport);
     }));
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, [activeBreakpoint]);
+  }, [activeBreakpoint, activeViewport]);
 
-  const applied = objectIds.reduce((result, id) => {
-    result[id] = applyViewport(valueToSceneState(theatreValues[id]), activeViewport);
-    return result;
-  }, {} as AppliedSceneState);
-  const boxChildValues = boxChildObjectIds.reduce((values, id) => {
-    values[id] = theatreValues[id];
-    return values;
-  }, {} as BoxChildValues);
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      pointerStateRef.current.clientX = event.clientX;
+      pointerStateRef.current.clientY = event.clientY;
+      pointerStateRef.current.active = true;
+    }
+    function handlePointerLeave() {
+      pointerStateRef.current.active = false;
+    }
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    window.addEventListener("pointerleave", handlePointerLeave);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerleave", handlePointerLeave);
+    };
+  }, []);
+
+  useEffect(() => {
+    const previewScroller = document.querySelector<HTMLElement>(runtime.previewScrollerSelector);
+    const scrollTarget: Window | HTMLElement = previewScroller ?? window;
+    let scrollEndTimer = 0;
+    function handleScroll() {
+      pointerStateRef.current.scrolling = true;
+      window.clearTimeout(scrollEndTimer);
+      scrollEndTimer = window.setTimeout(() => {
+        pointerStateRef.current.scrolling = false;
+      }, 120);
+    }
+    scrollTarget.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      scrollTarget.removeEventListener("scroll", handleScroll);
+      window.clearTimeout(scrollEndTimer);
+    };
+  }, [editor.breakpointMode, editor.enabled, runtime.previewScrollerSelector]);
 
   function saveTransform() {
     if (!selectedObject) return;
@@ -528,8 +666,9 @@ function SceneContent({ productCupColor }: SceneContentProps) {
         <MerchObject
           key={id}
           id={id}
-          state={applied[id]}
-          selected={editor.enabled && editor.selectedObject === id}
+          appliedRef={appliedRef}
+          theatreValuesRef={theatreValuesRef}
+          pointerStateRef={pointerStateRef}
           lockMotion={editor.enabled && (editor.selectedObject === id || (id === "box" && isBoxChildObjectId(editor.selectedObject)))}
           selectedObjectId={editor.selectedObject}
           editorEnabled={editor.enabled}
@@ -537,8 +676,6 @@ function SceneContent({ productCupColor }: SceneContentProps) {
           hoverTiltY={editor.hoverTiltY}
           hoverFollow={editor.hoverFollow}
           hoverRange={editor.hoverRange}
-          animationProgress={theatreValues[id].boxAnimationProgress ?? 0}
-          childValues={boxChildValues}
           productCupColor={productCupColor}
           setSelectedRef={setSelectedObject}
           activeBreakpoint={activeBreakpoint}
@@ -570,6 +707,7 @@ export function GlobalSceneCanvas({ productCupColor }: GlobalSceneCanvasProps) {
           scene.environmentIntensity = 0.82;
         }}
       >
+        {performanceDebugEnabled ? <PerformanceProbe /> : null}
         <Suspense fallback={null}>
           <SceneContent productCupColor={productCupColor} />
         </Suspense>

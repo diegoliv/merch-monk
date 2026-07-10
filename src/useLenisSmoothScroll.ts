@@ -1,14 +1,12 @@
 import { useEffect } from "react";
 import Lenis from "lenis";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-
-gsap.registerPlugin(ScrollTrigger);
+import { getScrollRuntime } from "./three/scrollRuntime";
 
 export function useLenisSmoothScroll() {
   useEffect(() => {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reducedMotion) return;
+    const { gsap, ScrollTrigger } = getScrollRuntime();
 
     const lenis = new Lenis({
       anchors: true,
