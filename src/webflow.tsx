@@ -17,6 +17,13 @@ type MerchMonkWebflowConfig = {
   canvasSelector?: string;
   pageSelector?: string;
   preferLocal?: boolean;
+  localOrigin?: string;
+  localEntry?: string;
+  localTimeoutMs?: number;
+  productionBaseUrl?: string;
+  productionEntry?: string;
+  productionCss?: string;
+  runtimeSource?: "local-loading" | "local" | "local-error" | "production";
   productColor?: ProductCupColorKey;
   modelUrl?: string;
   theatreState?: __UNSTABLE_Project_OnDiskState;

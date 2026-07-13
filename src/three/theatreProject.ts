@@ -14,6 +14,7 @@ export type TheatreObjectValue = {
   scale: number;
   opacity: number;
   visible: boolean;
+  showLogo?: boolean;
   boxAnimationProgress?: number;
 };
 
@@ -86,13 +87,14 @@ function createTheatreObject(id: ObjectId, sheet = theatreSheet) {
       z: types.number(defaults.position.z, { range: [-30, 30] }),
     },
     rotation: {
-      x: types.number(defaults.rotation.x, { range: [-Math.PI, Math.PI] }),
-      y: types.number(defaults.rotation.y, { range: [-Math.PI, Math.PI] }),
-      z: types.number(defaults.rotation.z, { range: [-Math.PI, Math.PI] }),
+      x: types.number(defaults.rotation.x),
+      y: types.number(defaults.rotation.y),
+      z: types.number(defaults.rotation.z),
     },
     scale: types.number(defaults.scale, { range: [0, 100] }),
     opacity: types.number(defaults.opacity, { range: [0, 1] }),
     visible: defaults.visible,
+    ...(id === "crewneck" ? { showLogo: types.boolean(false, { label: "Show Logo" }) } : {}),
     ...(id === "box" ? { boxAnimationProgress: types.number(0, { range: [0, 1] }) } : {}),
   };
 
@@ -133,6 +135,7 @@ export function cloneTheatreObjectValue(value: TheatreObjectValue): TheatreObjec
     scale: value.scale,
     opacity: value.opacity,
     visible: value.visible,
+    ...(typeof value.showLogo === "boolean" ? { showLogo: value.showLogo } : {}),
     ...(typeof value.boxAnimationProgress === "number" ? { boxAnimationProgress: value.boxAnimationProgress } : {}),
   };
 }
@@ -154,6 +157,7 @@ export function areTheatreObjectValuesEqual(a: TheatreObjectValue, b: TheatreObj
     nearlyEqual(a.scale, b.scale) &&
     nearlyEqual(a.opacity, b.opacity) &&
     a.visible === b.visible &&
+    (a.showLogo ?? false) === (b.showLogo ?? false) &&
     nearlyEqual(a.boxAnimationProgress ?? 0, b.boxAnimationProgress ?? 0)
   );
 }

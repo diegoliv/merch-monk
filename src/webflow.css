@@ -524,3 +524,218 @@ body.merch-monk-webflow-editing .w-webflow-badge {
   font-size: 10px;
   font-weight: 800;
 }
+
+/* Compact responsive scene controls */
+.hover-gui.is-expanded {
+  max-height: calc(100vh - 82px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.scene-control-section {
+  position: relative;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scene-control-section > summary {
+  display: list-item;
+  min-height: 24px;
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 900;
+  list-style-position: inside;
+  list-style-type: disclosure-closed;
+  line-height: 24px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scene-control-section[open] > summary {
+  list-style-type: disclosure-open;
+}
+
+.scene-control-section > summary::marker {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 10px;
+}
+
+.scene-section-summary-content {
+  display: inline-flex;
+  width: calc(100% - 14px);
+  align-items: center;
+  vertical-align: middle;
+}
+
+.scene-section-summary-content.responsive-object-row {
+  display: inline-grid;
+}
+
+.scene-section-body {
+  margin-top: 8px;
+}
+
+.responsive-gui,
+.hover-effect-gui {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.responsive-gui-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.responsive-gui-options button {
+  min-height: 28px;
+  padding: 0 5px;
+}
+
+.responsive-layout-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 9px;
+  margin-top: 0;
+}
+
+.responsive-anchor-actions-row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  align-items: end;
+  gap: 8px;
+}
+
+.responsive-control-label,
+.responsive-anchor-control > span {
+  display: block;
+  margin-bottom: 5px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.responsive-anchor-control,
+.responsive-transform-fields {
+  min-width: 0;
+}
+
+.responsive-anchor-grid {
+  width: 82px;
+  box-sizing: border-box;
+  align-content: center;
+  justify-content: center;
+}
+
+.responsive-transform-fields {
+  display: grid;
+  gap: 6px;
+}
+
+.responsive-transform-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.responsive-number-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 3px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.responsive-number-field > span:first-child {
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1;
+  text-align: left;
+}
+
+.responsive-number-field > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.responsive-number-field input {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 4px;
+  border: 0;
+  outline: 0;
+  color: #ffffff;
+  background: transparent;
+  font: inherit;
+  appearance: textfield;
+}
+
+.responsive-anchor-actions {
+  height: 82px;
+  margin-top: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+}
+
+.responsive-anchor-actions button {
+  min-height: 0;
+}
+
+.responsive-number-field input::-webkit-inner-spin-button,
+.responsive-number-field input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.responsive-number-scrub {
+  display: grid;
+  align-self: stretch;
+  place-items: center;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.46);
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.responsive-number-scrub:hover,
+.responsive-number-scrub:focus-visible,
+.responsive-number-scrub:active {
+  color: #ffffff;
+  background: rgba(255, 74, 9, 0.72);
+  outline: 0;
+}
+
+.hover-effect-gui > summary {
+  padding-right: 52px;
+}
+
+.hover-reset-button {
+  position: absolute;
+  top: 7px;
+  right: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #111111;
+  background: #ffffff;
+  font: 900 11px/1 var(--font-body, "TT Commons Pro", Inter, Arial, sans-serif);
+  cursor: pointer;
+}
+
+.hover-effect-gui:not([open]) .hover-reset-button {
+  display: none;
+}
+
+.hover-effect-controls {
+  margin-top: 10px;
+}

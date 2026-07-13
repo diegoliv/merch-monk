@@ -138,6 +138,7 @@ function getTheatrePropPaths(object: ReturnType<typeof getTheatreObject>): Theat
   ];
 
   if (object.props.boxAnimationProgress) paths.push(["boxAnimationProgress"]);
+  if (object.props.showLogo) paths.push(["showLogo"]);
 
   return paths.map((pathToProp) => ({ pathToProp, pointer: getPointerAtPath(object, pathToProp) }));
 }
@@ -241,6 +242,7 @@ function setTheatreProps(
   if (typeof value.scale === "number") set(object.props.scale, value.scale);
   if (typeof value.opacity === "number") set(object.props.opacity, value.opacity);
   if (typeof value.visible === "boolean") set(object.props.visible, value.visible);
+  if (typeof value.showLogo === "boolean" && object.props.showLogo) set(object.props.showLogo, value.showLogo);
   if (typeof value.boxAnimationProgress === "number" && object.props.boxAnimationProgress) {
     set(object.props.boxAnimationProgress, value.boxAnimationProgress);
   }

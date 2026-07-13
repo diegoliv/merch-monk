@@ -16,6 +16,7 @@ import { useExperienceRuntime } from "../experienceRuntime";
 import type { AppliedSceneState, BoxChildObjectId, Breakpoint, ObjectId } from "./types";
 
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
+const crewneckLogoPath = new URL("../textures/crewneck-logo.avif", new URL(modelPath, window.location.href)).href;
 const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones", product_cup: "cup" };
 const boxAnimationNames = new Set(["box_open"]);
 const entranceObjectIds: ObjectId[] = renderObjectIds.filter((id) => id !== "box" && id !== "product_cup");
@@ -231,6 +232,32 @@ function setOpacity(materials: THREE.Material[], opacity: number) {
   });
 }
 
+type CrewneckLogoMaterialState = {
+  material: THREE.MeshStandardMaterial;
+  baseEmissive: THREE.Color;
+  baseEmissiveMap: THREE.Texture | null;
+  baseEmissiveIntensity: number;
+  logoMap: THREE.Texture;
+};
+
+function createCrewneckLogoTexture(image: HTMLImageElement) {
+  const texture = new THREE.Texture(image);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = false;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function setCrewneckLogoVisible(states: CrewneckLogoMaterialState[], visible: boolean) {
+  states.forEach(({ material, baseEmissive, baseEmissiveMap, baseEmissiveIntensity, logoMap }) => {
+    if (visible) material.emissive.set("#ffffff");
+    else material.emissive.copy(baseEmissive);
+    material.emissiveMap = visible ? logoMap : baseEmissiveMap;
+    material.emissiveIntensity = visible ? 1 : baseEmissiveIntensity;
+    material.needsUpdate = true;
+  });
+}
+
 function isProductCupMainMaterial(name: string) {
   return (name.includes("orange") && !name.includes("dark")) || name.includes("cup.uv");
 }
@@ -409,6 +436,8 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
   const childRotationQuaternionRef = useRef(new THREE.Quaternion());
   const lastOpacityRef = useRef(Number.NaN);
   const lastAnimationProgressRef = useRef(Number.NaN);
+  const crewneckLogoMaterialsRef = useRef<CrewneckLogoMaterialState[]>([]);
+  const lastShowLogoRef = useRef<boolean | null>(null);
   const phase = useMemo(() => objectIds.indexOf(id) * 0.45, [id]);
   const object = useMemo(() => {
     const node = scene.getObjectByName(modelNodeNames[id] ?? id);
@@ -440,6 +469,45 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
       return result;
     }, {} as Partial<Record<BoxChildObjectId, THREE.Material[]>>);
   }, [id, object]);
+  useEffect(() => {
+    if (id !== "crewneck" || !object) return;
+
+    let cancelled = false;
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => {
+      if (cancelled) return;
+      const logoMap = createCrewneckLogoTexture(image);
+      const logoStates = materials.flatMap((material) => {
+        if (!(material instanceof THREE.MeshStandardMaterial)) return [];
+        return [{
+          material,
+          baseEmissive: material.emissive.clone(),
+          baseEmissiveMap: material.emissiveMap,
+          baseEmissiveIntensity: material.emissiveIntensity,
+          logoMap,
+        }];
+      });
+      crewneckLogoMaterialsRef.current = logoStates;
+      const showLogo = theatreValuesRef.current.crewneck.showLogo === true;
+      setCrewneckLogoVisible(logoStates, showLogo);
+      lastShowLogoRef.current = showLogo;
+    };
+    image.onerror = () => {
+      if (!cancelled) console.warn("[Merch Monk] Could not load crewneck logo texture: " + crewneckLogoPath);
+    };
+    image.src = crewneckLogoPath;
+
+    return () => {
+      cancelled = true;
+      image.onload = null;
+      image.onerror = null;
+      setCrewneckLogoVisible(crewneckLogoMaterialsRef.current, false);
+      crewneckLogoMaterialsRef.current[0]?.logoMap.dispose();
+      crewneckLogoMaterialsRef.current = [];
+      lastShowLogoRef.current = null;
+    };
+  }, [id, materials, object, theatreValuesRef]);
   useEffect(() => {
     if (id !== "product_cup" || !object) return;
 
@@ -513,6 +581,13 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
           childRotationEulerRef.current,
           childRotationQuaternionRef.current,
         );
+      }
+      if (id === "crewneck") {
+        const showLogo = theatreValuesRef.current.crewneck.showLogo === true;
+        if (lastShowLogoRef.current !== showLogo) {
+          setCrewneckLogoVisible(crewneckLogoMaterialsRef.current, showLogo);
+          lastShowLogoRef.current = showLogo;
+        }
       }
     }
   }

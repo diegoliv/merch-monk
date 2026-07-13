@@ -8,10 +8,11 @@
   var productionEntry = config.productionEntry || normalizedProductionBase + "merch-monk-webflow.js";
   var productionCss = config.productionCss || normalizedProductionBase + "style.css";
   var localTimeoutMs = config.localTimeoutMs || 2500;
-  var preferLocal = config.preferLocal !== false;
   var editorRequested = new URLSearchParams(window.location.search).get("editor") === "true";
+  var preferLocal = editorRequested || config.preferLocal === true;
   var loaded = false;
   var productionLoading = false;
+  var localFallbackTimer = null;
   var hasCustomEditor = typeof config.editor === "boolean";
   var hasCustomModelUrl = Boolean(config.modelUrl);
 
@@ -22,8 +23,13 @@
     window.globalThis.process = window.process;
   }
 
-  if (!hasCustomEditor) config.editor = preferLocal || editorRequested;
-  if (!hasCustomModelUrl) config.modelUrl = normalizedLocalOrigin + "/models/merch_monk_website.glb";
+  if (editorRequested) config.editor = true;
+  else if (!hasCustomEditor) config.editor = false;
+  if (!hasCustomModelUrl) {
+    config.modelUrl = preferLocal
+      ? normalizedLocalOrigin + "/models/merch_monk_website.glb"
+      : normalizedProductionBase + "models/merch_monk_website.glb";
+  }
   window.MerchMonkWebflow = config;
   ensureProcessEnv("development");
 
@@ -44,12 +50,10 @@
     return script;
   }
 
-  function appendInlineModule(source, onLoad, onError) {
+  function appendInlineModule(source) {
     var script = document.createElement("script");
     script.type = "module";
     script.textContent = source;
-    script.onload = onLoad;
-    script.onerror = onError;
     document.head.appendChild(script);
     return script;
   }
@@ -81,6 +85,7 @@
       productionLoading = false;
       if (loaded) return;
       loaded = true;
+      config.runtimeSource = "production";
       appendModule(productionEntry);
     }
 
@@ -116,34 +121,54 @@
   }
 
   function loadLocal() {
+    var callbackName = "__merchMonkLocalLoad_" + Date.now().toString(36);
+    var localEntryUrl = JSON.stringify(localEntry);
+    var refreshRuntimeUrl = JSON.stringify(normalizedLocalOrigin + "/@react-refresh");
+    var viteClientUrl = JSON.stringify(normalizedLocalOrigin + "/@vite/client");
+
+    window[callbackName] = function (error) {
+      delete window[callbackName];
+
+      if (error) {
+        config.runtimeSource = "local-error";
+        console.error(
+          "[Merch Monk] Local editor load failed. Make sure the Vite server is running at " + normalizedLocalOrigin + ".",
+          error,
+        );
+        window.dispatchEvent(new CustomEvent("merch-monk:local-error", { detail: { error: error, origin: normalizedLocalOrigin } }));
+        if (!editorRequested) loadProduction();
+        return;
+      }
+
+      if (loaded || productionLoading) return;
+      if (localFallbackTimer) window.clearTimeout(localFallbackTimer);
+      loaded = true;
+      config.runtimeSource = "local";
+      console.info("[Merch Monk] Loaded local editor runtime from " + normalizedLocalOrigin + ".");
+    };
+
     var refreshPreamble = [
-      'import RefreshRuntime from "' + normalizedLocalOrigin + '/@react-refresh";',
+      "import RefreshRuntime from " + refreshRuntimeUrl + ";",
       'RefreshRuntime.injectIntoGlobalHook(window);',
       'window.$RefreshReg$ = function () {};',
       'window.$RefreshSig$ = function () { return function (type) { return type; }; };',
       'window.__vite_plugin_react_preamble_installed__ = true;',
-      'import "' + normalizedLocalOrigin + '/@vite/client";',
+      "import " + viteClientUrl + ";",
+      "import(" + localEntryUrl + ")",
+      "  .then(function () { window[" + JSON.stringify(callbackName) + "](); })",
+      "  .catch(function (error) { window[" + JSON.stringify(callbackName) + "](error); });",
     ].join("\n");
 
-    appendInlineModule(
-      refreshPreamble,
-      function () {
-        appendModule(
-          localEntry,
-          function () {
-            loaded = true;
-          },
-          loadProduction,
-        );
-      },
-      loadProduction,
-    );
+    config.runtimeSource = "local-loading";
+    appendInlineModule(refreshPreamble);
   }
 
   if (preferLocal) {
-    window.setTimeout(function () {
-      if (!loaded) loadProduction();
-    }, localTimeoutMs);
+    if (!editorRequested) {
+      localFallbackTimer = window.setTimeout(function () {
+        if (!loaded) loadProduction();
+      }, localTimeoutMs);
+    }
     loadLocal();
   } else {
     loadProduction();
