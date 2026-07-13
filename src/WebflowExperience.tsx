@@ -134,7 +134,7 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
   }, [configuredColor]);
 
   useEffect(() => {
-    if (editor.breakpointMode === "auto") {
+    if (editor.enabled && editor.breakpointMode === "auto") {
       editorStore.setSelection({ breakpointMode: "desktop" });
     }
     if (!showEditor && editor.enabled) {

@@ -5,6 +5,7 @@ import { boxChildObjectIds, objectIds } from "./sceneObjects";
 import { sceneTimeline } from "./sceneTimeline";
 import productionTheatreStateJson from "./merch-monk-home.theatre-project-state.json";
 import type { Breakpoint, ObjectId } from "./types";
+import { prepareTheatreState } from "./theatreStateMigration";
 
 export type TheatreObjectValue = {
   anchor: { x: number; y: number };
@@ -16,16 +17,16 @@ export type TheatreObjectValue = {
   boxAnimationProgress?: number;
 };
 
-export const theatreProjectId = "Merch Monk Scene Neutral";
+export const theatreProjectId = "Merch Monk Scene Responsive";
 export const theatreSequenceLength = sceneTimeline.length;
 
-const productionTheatreState = (
+const productionTheatreState = prepareTheatreState((
   window.MerchMonkWebflow?.theatreState ?? productionTheatreStateJson
-) as __UNSTABLE_Project_OnDiskState;
+) as __UNSTABLE_Project_OnDiskState);
 
 export const theatreProject = getProject(
   theatreProjectId,
-  import.meta.env.PROD ? { state: productionTheatreState } : undefined,
+  { state: productionTheatreState },
 );
 export const theatreSheets = Object.fromEntries(
   breakpoints.map((breakpoint) => [
@@ -36,22 +37,32 @@ export const theatreSheets = Object.fromEntries(
 export const theatreSheet = theatreSheets.desktop;
 
 function theatreDefaults(id?: ObjectId): TheatreObjectValue {
+  if (id && boxChildObjectIds.includes(id as (typeof boxChildObjectIds)[number])) {
+    return {
+      anchor: { x: 50, y: 50 },
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: 1,
+      opacity: 1,
+      visible: true,
+    };
+  }
   if (id === "product_cup") {
     return {
-      anchor: { x: 0.58, y: 0.56 },
+      anchor: { x: 58, y: 56 },
       position: { x: 0, y: 0, z: 0.35 },
       rotation: { x: 0.08, y: -0.18, z: 0 },
-      scale: 1.45,
+      scale: 14.5,
       opacity: 1,
       visible: true,
     };
   }
 
   return {
-    anchor: { x: 0.5, y: 0.5 },
+    anchor: { x: 50, y: 50 },
     position: { x: 0, y: 0, z: 0 },
     rotation: { x: 0, y: 0, z: 0 },
-    scale: 1,
+    scale: 10,
     opacity: 1,
     visible: true,
   };
@@ -66,12 +77,12 @@ function createTheatreObject(id: ObjectId, sheet = theatreSheet) {
 
   const config = {
     anchor: {
-      x: types.number(defaults.anchor.x, { range: [-2, 3] }),
-      y: types.number(defaults.anchor.y, { range: [-2, 3] }),
+      x: types.number(defaults.anchor.x, { range: [-200, 300] }),
+      y: types.number(defaults.anchor.y, { range: [-200, 300] }),
     },
     position: {
-      x: types.number(defaults.position.x, { range: [-30, 30] }),
-      y: types.number(defaults.position.y, { range: [-30, 30] }),
+      x: types.number(defaults.position.x, { range: [-300, 300] }),
+      y: types.number(defaults.position.y, { range: [-300, 300] }),
       z: types.number(defaults.position.z, { range: [-30, 30] }),
     },
     rotation: {
@@ -79,7 +90,7 @@ function createTheatreObject(id: ObjectId, sheet = theatreSheet) {
       y: types.number(defaults.rotation.y, { range: [-Math.PI, Math.PI] }),
       z: types.number(defaults.rotation.z, { range: [-Math.PI, Math.PI] }),
     },
-    scale: types.number(defaults.scale, { range: [0, 10] }),
+    scale: types.number(defaults.scale, { range: [0, 100] }),
     opacity: types.number(defaults.opacity, { range: [0, 1] }),
     visible: defaults.visible,
     ...(id === "box" ? { boxAnimationProgress: types.number(0, { range: [0, 1] }) } : {}),

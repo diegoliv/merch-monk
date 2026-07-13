@@ -3,8 +3,8 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, OrthographicCamera, TransformControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
-import { breakpointPreviewSizes, resolveBreakpointMode } from "./breakpoints";
-import { anchorToWorld, applyViewport, getWorldSize } from "./math";
+import { resolveBreakpointMode } from "./breakpoints";
+import { anchorToWorld, applyViewport, worldOffsetToPercent, worldScaleToPercent } from "./math";
 import { boxChildObjectIds, objectIds, renderObjectIds } from "./sceneObjects";
 import { editorStore, useEditorStore } from "./editorStore";
 import { getTheatreObject, getTheatreObjects, theatreProject, type TheatreObjectValue, valueToSceneState } from "./theatreProject";
@@ -391,7 +391,7 @@ type MerchObjectProps = {
 
 function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
   const { scene, animations } = useGLTF(modelPath);
-  const { camera, size } = useThree();
+  const { camera, gl } = useThree();
   const groupRef = useRef<THREE.Group | null>(null);
   const pointerRef = useRef(new THREE.Vector2());
   const raycasterRef = useRef(new THREE.Raycaster());
@@ -563,7 +563,11 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
       ? THREE.MathUtils.clamp(entranceElapsed / entranceDuration, 0, 1)
       : 1;
     const entranceScale = 1 - Math.pow(1 - entranceProgress, 3);
-    pointerRef.current.set((pointerState.clientX / size.width) * 2 - 1, -(pointerState.clientY / size.height) * 2 + 1);
+    const canvasBounds = gl.domElement.getBoundingClientRect();
+    pointerRef.current.set(
+      ((pointerState.clientX - canvasBounds.left) / Math.max(canvasBounds.width, 1)) * 2 - 1,
+      -((pointerState.clientY - canvasBounds.top) / Math.max(canvasBounds.height, 1)) * 2 + 1,
+    );
 
     if (id === "box" && mixerRef.current && boxActionRef.current && boxAnimationClip) {
       const progress = THREE.MathUtils.clamp(theatreValuesRef.current.box.boxAnimationProgress ?? 0, 0, 1);
@@ -694,19 +698,14 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
   const runtime = useExperienceRuntime();
   const viewport = useViewportInfo();
   const editor = useEditorStore();
-  const activeBreakpoint = resolveBreakpointMode(editor.breakpointMode, viewport.breakpoint);
-  const activeViewport = useMemo(() => {
-    if (editor.breakpointMode === "auto") return { ...viewport, breakpoint: activeBreakpoint };
-
-    const previewSize = breakpointPreviewSizes[activeBreakpoint];
-    const worldSize = getWorldSize(previewSize.width, previewSize.height);
-    return {
-      ...viewport,
-      ...previewSize,
-      ...worldSize,
-      breakpoint: activeBreakpoint,
-    };
-  }, [activeBreakpoint, editor.breakpointMode, viewport]);
+  const runtimeBreakpointMode = editor.enabled ? editor.breakpointMode : "auto";
+  const activeBreakpoint = resolveBreakpointMode(runtimeBreakpointMode, viewport.breakpoint);
+  const activeViewport = useMemo(
+    () => ({ ...viewport, breakpoint: activeBreakpoint }),
+    [activeBreakpoint, viewport],
+  );
+  const activeViewportRef = useRef(activeViewport);
+  activeViewportRef.current = activeViewport;
   useSceneProgress(activeBreakpoint);
   const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
   const theatreValuesRef = useRef<TheatreValues>(initialTheatreValues(activeBreakpoint));
@@ -722,18 +721,24 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
     const objects = getTheatreObjects(activeBreakpoint);
     theatreValuesRef.current = initialTheatreValues(activeBreakpoint);
     objectIds.forEach((id) => {
-      appliedRef.current[id] = applyViewport(valueToSceneState(theatreValuesRef.current[id]), activeViewport);
+      appliedRef.current[id] = applyViewport(valueToSceneState(theatreValuesRef.current[id]), activeViewportRef.current);
     });
 
     const unsubscribers = objectIds.map((id) => objects[id].onValuesChange((value) => {
       const debug = getPerformanceDebug();
       if (debug) debug.theatreUpdates += 1;
       theatreValuesRef.current[id] = value as TheatreObjectValue;
-      appliedRef.current[id] = applyViewport(valueToSceneState(value as TheatreObjectValue), activeViewport);
+      appliedRef.current[id] = applyViewport(valueToSceneState(value as TheatreObjectValue), activeViewportRef.current);
     }));
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, [activeBreakpoint, activeViewport]);
+  }, [activeBreakpoint]);
+
+  useEffect(() => {
+    objectIds.forEach((id) => {
+      appliedRef.current[id] = applyViewport(valueToSceneState(theatreValuesRef.current[id]), activeViewport);
+    });
+  }, [activeViewport]);
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -804,18 +809,23 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
     }
 
     const anchorWorld = anchorToWorld([current.anchor.x, current.anchor.y], activeViewport);
+    const position = worldOffsetToPercent([
+      selectedObject.position.x - anchorWorld[0],
+      selectedObject.position.y - anchorWorld[1],
+      selectedObject.position.z - anchorWorld[2],
+    ], activeViewport);
     const next: Partial<TheatreObjectValue> = {
       position: {
-        x: selectedObject.position.x - anchorWorld[0],
-        y: selectedObject.position.y - anchorWorld[1],
-        z: selectedObject.position.z - anchorWorld[2],
+        x: position[0],
+        y: position[1],
+        z: position[2],
       },
       rotation: {
         x: selectedObject.rotation.x,
         y: selectedObject.rotation.y,
         z: selectedObject.rotation.z,
       },
-      scale: selectedObject.scale.x,
+      scale: worldScaleToPercent(selectedObject.scale.x, activeViewport),
       visible: true,
       opacity: Math.max(current.opacity, 1),
     };

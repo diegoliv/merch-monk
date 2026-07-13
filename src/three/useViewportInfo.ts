@@ -21,7 +21,7 @@ function readViewport(element?: HTMLElement | null): ViewportInfo {
 
 export function useViewportInfo() {
   const runtime = useExperienceRuntime();
-  const element = runtime.mode === "webflow" ? runtime.pageElement : null;
+  const element = runtime.mode === "webflow" ? runtime.canvasElement : null;
   const [viewport, setViewport] = useState(() => readViewport(element));
 
   useEffect(() => {

@@ -37,7 +37,7 @@ let snapshot: EditorSnapshot = {
   hoverTiltY: savedSettings.hoverTiltY ?? 0.38,
   hoverFollow: savedSettings.hoverFollow ?? 0.16,
   hoverRange: savedSettings.hoverRange ?? 1.25,
-  breakpointMode: savedSettings.breakpointMode === "auto" ? "desktop" : savedSettings.breakpointMode ?? "desktop",
+  breakpointMode: savedSettings.breakpointMode ?? "auto",
 };
 
 const listeners = new Set<() => void>();

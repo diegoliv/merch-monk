@@ -32,23 +32,48 @@ export function interpolateObjectState(a: SceneObjectState, b: SceneObjectState,
 }
 
 export function anchorToWorld(anchor: [number, number], viewport: ViewportInfo): Vec3 {
-  const x = (anchor[0] - 0.5) * viewport.worldWidth;
-  const y = (0.5 - anchor[1]) * viewport.worldHeight;
+  const x = (anchor[0] / 100 - 0.5) * viewport.worldWidth;
+  const y = (0.5 - anchor[1] / 100) * viewport.worldHeight;
   return [x, y, 0];
+}
+
+export function percentOffsetToWorld(position: Vec3, viewport: ViewportInfo): Vec3 {
+  return [
+    (position[0] / 100) * viewport.worldWidth,
+    -(position[1] / 100) * viewport.worldHeight,
+    position[2],
+  ];
+}
+
+export function worldOffsetToPercent(position: Vec3, viewport: ViewportInfo): Vec3 {
+  return [
+    (position[0] / viewport.worldWidth) * 100,
+    -(position[1] / viewport.worldHeight) * 100,
+    position[2],
+  ];
+}
+
+export function percentScaleToWorld(scale: number, viewport: ViewportInfo) {
+  return (scale / 100) * Math.min(viewport.worldWidth, viewport.worldHeight);
+}
+
+export function worldScaleToPercent(scale: number, viewport: ViewportInfo) {
+  return (scale / Math.min(viewport.worldWidth, viewport.worldHeight)) * 100;
 }
 
 export function applyViewport(state: SceneObjectState, viewport: ViewportInfo) {
   const anchored = anchorToWorld(state.anchor, viewport);
+  const offset = percentOffsetToWorld(state.position, viewport);
   return {
     position: state.position,
     rotation: state.rotation,
-    scale: state.scale,
+    scale: percentScaleToWorld(state.scale, viewport),
     opacity: state.opacity,
     visible: state.visible,
     worldPosition: [
-      anchored[0] + state.position[0],
-      anchored[1] + state.position[1],
-      anchored[2] + state.position[2],
+      anchored[0] + offset[0],
+      anchored[1] + offset[1],
+      anchored[2] + offset[2],
     ] as Vec3,
   };
 }

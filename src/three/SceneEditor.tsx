@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { breakpointLabels, breakpoints, resolveBreakpointMode } from "./breakpoints";
 import { editorStore, useEditorStore } from "./editorStore";
-import { objectIds } from "./sceneObjects";
+import { boxChildObjectIds, objectIds } from "./sceneObjects";
 import { areTheatreObjectValuesEqual, getTheatreObject, type TheatreObjectValue } from "./theatreProject";
 import {
   copyTheatreObjectValue,
   copyTheatreObjectValueToBreakpoints,
   hideTheatreStudio,
   showTheatreStudio,
+  setTheatreObjectValue,
 } from "./theatreStudio";
 import { useViewportInfo } from "./useViewportInfo";
 import type { Breakpoint, ObjectId } from "./types";
@@ -54,6 +55,45 @@ function HoverControl({ label, value, min, max, step, onChange }: HoverControlPr
 }
 
 const breakpointOptions = breakpoints.map((breakpoint) => ({ value: breakpoint, label: breakpointLabels[breakpoint] }));
+const anchorPresets = [
+  { label: "Top left", x: 0, y: 0 },
+  { label: "Top center", x: 50, y: 0 },
+  { label: "Top right", x: 100, y: 0 },
+  { label: "Center left", x: 0, y: 50 },
+  { label: "Center", x: 50, y: 50 },
+  { label: "Center right", x: 100, y: 50 },
+  { label: "Bottom left", x: 0, y: 100 },
+  { label: "Bottom center", x: 50, y: 100 },
+  { label: "Bottom right", x: 100, y: 100 },
+] as const;
+
+function PercentInput({ label, value, min = -300, max = 300, onChange }: {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="responsive-percent-field">
+      <span>{label}</span>
+      <div>
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={0.1}
+          value={Number(value.toFixed(2))}
+          onChange={(event) => {
+            const next = Number(event.currentTarget.value);
+            if (Number.isFinite(next)) onChange(next);
+          }}
+        />
+        <span>%</span>
+      </div>
+    </label>
+  );
+}
 
 function formatObjectId(id: ObjectId) {
   return id.replace(/_/g, " ");
@@ -154,9 +194,10 @@ export function SceneEditor() {
   const activeBreakpoint = resolveBreakpointMode(editor.breakpointMode, viewport.breakpoint);
 
   useEffect(() => {
-    if (editor.breakpointMode === "auto") editorStore.setSelection({ breakpointMode: "desktop" });
-  }, [editor.breakpointMode]);
+    if (editor.enabled && editor.breakpointMode === "auto") editorStore.setSelection({ breakpointMode: "desktop" });
+  }, [editor.breakpointMode, editor.enabled]);
   const [responsiveStatus, setResponsiveStatus] = useState<ResponsiveStatus>(() => readResponsiveStatus(editor.selectedObject, activeBreakpoint));
+  const [objectValue, setObjectValue] = useState<TheatreObjectValue>(() => getTheatreObject(editor.selectedObject, activeBreakpoint).value as TheatreObjectValue);
   const [controlsExpanded, setControlsExpanded] = useState(true);
 
   useEffect(() => {
@@ -185,6 +226,7 @@ export function SceneEditor() {
   useEffect(() => {
     function updateStatus() {
       setResponsiveStatus(readResponsiveStatus(editor.selectedObject, activeBreakpoint));
+      setObjectValue(getTheatreObject(editor.selectedObject, activeBreakpoint).value as TheatreObjectValue);
     }
 
     updateStatus();
@@ -220,6 +262,23 @@ export function SceneEditor() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [editor.enabled]);
+
+  const isLayoutObject = !boxChildObjectIds.includes(editor.selectedObject as (typeof boxChildObjectIds)[number]);
+
+  function updateLayout(value: Partial<TheatreObjectValue>) {
+    void setTheatreObjectValue(editor.selectedObject, value, activeBreakpoint);
+  }
+
+  function setAnchor(x: number, y: number) {
+    updateLayout({
+      anchor: { x, y },
+      position: {
+        x: objectValue.position.x + objectValue.anchor.x - x,
+        y: objectValue.position.y + objectValue.anchor.y - y,
+        z: objectValue.position.z,
+      },
+    });
+  }
 
   async function useDesktopForActiveObject() {
     if (activeBreakpoint === "desktop") return;
@@ -278,6 +337,49 @@ export function SceneEditor() {
               <span>{formatObjectId(editor.selectedObject)}</span>
               <strong className={`responsive-status is-${responsiveStatus}`}>{responsiveStatusLabel(responsiveStatus)}</strong>
             </div>
+            {isLayoutObject ? (
+              <div className="responsive-layout-controls">
+                <div className="responsive-viewport-size">{viewport.width} × {viewport.height}px</div>
+                <div className="responsive-anchor-grid" role="group" aria-label="Screen anchor">
+                  {anchorPresets.map((preset) => {
+                    const active = Math.abs(objectValue.anchor.x - preset.x) < 0.01 && Math.abs(objectValue.anchor.y - preset.y) < 0.01;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        className={active ? "is-active" : ""}
+                        aria-label={preset.label}
+                        title={preset.label}
+                        aria-pressed={active}
+                        onClick={() => setAnchor(preset.x, preset.y)}
+                      >
+                        <span />
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="responsive-percent-fields">
+                  <PercentInput
+                    label="X"
+                    value={objectValue.position.x}
+                    onChange={(x) => updateLayout({ position: { ...objectValue.position, x } })}
+                  />
+                  <PercentInput
+                    label="Y"
+                    value={objectValue.position.y}
+                    onChange={(y) => updateLayout({ position: { ...objectValue.position, y } })}
+                  />
+                  <PercentInput
+                    label="Size"
+                    value={objectValue.scale}
+                    min={0}
+                    onChange={(scale) => updateLayout({ scale })}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="responsive-local-transform-note">Local box transform</div>
+            )}
             <div className="responsive-actions">
               <button type="button" disabled={activeBreakpoint === "desktop"} onClick={useDesktopForActiveObject}>
                 Use Desktop
