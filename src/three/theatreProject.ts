@@ -97,8 +97,10 @@ function theatreDefaults(id?: ObjectId): TheatreObjectValue {
 }
 
 export function theatreObjectName(id: ObjectId) {
-  if (boxChildObjectIds.includes(id as (typeof boxChildObjectIds)[number])) return `> ${id}`;
-  if (backgroundChildObjectIds.includes(id as BackgroundChildObjectId)) return `> ${id}`;
+  if (boxChildObjectIds.includes(id as (typeof boxChildObjectIds)[number])) return `box / ${id}`;
+  if (backgroundChildObjectIds.includes(id as BackgroundChildObjectId)) {
+    return `${backgroundParentByChild[id as BackgroundChildObjectId]} / ${id}`;
+  }
   return id;
 }
 

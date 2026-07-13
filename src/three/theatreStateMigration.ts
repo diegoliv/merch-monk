@@ -14,14 +14,14 @@ type LayoutState = __UNSTABLE_Project_OnDiskState & {
   sheetsById: Record<string, SerializableRecord>;
 };
 
-const compactObjectNameByLegacyName = Object.fromEntries([
+const canonicalObjectNameByAlternateName = Object.fromEntries([
   ...boxChildObjectIds.flatMap((childId) => [
-    [`box / ${childId}`, `> ${childId}`],
-    [`box > ${childId}`, `> ${childId}`],
+    [`> ${childId}`, `box / ${childId}`],
+    [`box > ${childId}`, `box / ${childId}`],
   ]),
   ...backgroundChildObjectIds.flatMap((childId) => [
-    [`${backgroundParentByChild[childId]} / ${childId}`, `> ${childId}`],
-    [`${backgroundParentByChild[childId]} > ${childId}`, `> ${childId}`],
+    [`> ${childId}`, `${backgroundParentByChild[childId]} / ${childId}`],
+    [`${backgroundParentByChild[childId]} > ${childId}`, `${backgroundParentByChild[childId]} / ${childId}`],
   ]),
 ]) as Record<string, string>;
 
@@ -122,7 +122,7 @@ function stateUsesResponsiveUnits(state: LayoutState) {
   });
 }
 
-function migrateCompactObjectNames(state: LayoutState) {
+function migrateCanonicalObjectNames(state: LayoutState) {
   Object.values(state.sheetsById).forEach((sheet) => {
     if (!isRecord(sheet)) return;
 
@@ -139,10 +139,10 @@ function migrateCompactObjectNames(state: LayoutState) {
 }
 
 function migrateObjectNamesInRecord(record: SerializableRecord) {
-  Object.entries(compactObjectNameByLegacyName).forEach(([legacyName, compactName]) => {
-    if (!(legacyName in record)) return;
-    if (!(compactName in record)) record[compactName] = record[legacyName];
-    delete record[legacyName];
+  Object.entries(canonicalObjectNameByAlternateName).forEach(([alternateName, canonicalName]) => {
+    if (!(alternateName in record)) return;
+    if (!(canonicalName in record)) record[canonicalName] = record[alternateName];
+    delete record[alternateName];
   });
 }
 function ensureResponsiveSheets(state: LayoutState) {
@@ -164,7 +164,7 @@ export function prepareTheatreState(source: __UNSTABLE_Project_OnDiskState) {
     });
     state.__merchMonkLayoutVersion = merchMonkLayoutVersion;
   }
-  migrateCompactObjectNames(state);
+  migrateCanonicalObjectNames(state);
   ensureResponsiveSheets(state);
   delete state.__merchMonkLayoutVersion;
   return state as __UNSTABLE_Project_OnDiskState;

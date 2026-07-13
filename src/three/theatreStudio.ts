@@ -1,4 +1,5 @@
 import { cloneTheatreObjectValue, getTheatreObject, getTheatreSheet, theatreProjectId, type TheatreObjectValue } from "./theatreProject";
+import { backgroundChildByParent } from "./sceneObjects";
 import type { Breakpoint, ObjectId } from "./types";
 
 type Studio = typeof import("@theatre/studio").default;
@@ -61,6 +62,7 @@ let studioPromise: Promise<Studio> | null = null;
 let initialized = false;
 
 const theatreOutlineStyleId = "merch-monk-theatre-outline-style";
+const theatreChildFolderNames = new Set(["box", ...Object.keys(backgroundChildByParent)]);
 let theatreOutlineRoot: ShadowRoot | null = null;
 let theatreOutlineObserver: MutationObserver | null = null;
 let theatreOutlineElement: HTMLElement | null = null;
@@ -142,6 +144,27 @@ function ensureTheatreOutlineTrack(root: ShadowRoot) {
   });
 }
 
+function compactTheatreOutlineHierarchy(outline: HTMLElement) {
+  const folderHeaders = Array.from(outline.querySelectorAll<HTMLElement>('[data-header="true"]')).filter((header) => {
+    const label = header.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    return header.classList.contains("not-selectable") && theatreChildFolderNames.has(label);
+  });
+
+  folderHeaders.forEach((header) => {
+    const listItem = header.parentElement;
+    const childList = listItem
+      ? Array.from(listItem.children).find((child): child is HTMLUListElement => child instanceof HTMLUListElement)
+      : undefined;
+
+    if (!childList) {
+      header.click();
+      return;
+    }
+
+    header.dataset.merchMonkDuplicateFolderHeader = "true";
+    childList.dataset.merchMonkChildList = "true";
+  });
+}
 function bindTheatreOutline(outline: HTMLElement, root: ShadowRoot) {
   ensureTheatreOutlineTrack(root);
   if (theatreOutlineElement === outline) {
@@ -185,6 +208,14 @@ function ensureTheatreOutlineViewport(attempt = 0) {
       [data-merch-monk-outline-scroll="true"]::-webkit-scrollbar {
         width: 0;
         height: 0;
+      }
+
+      [data-merch-monk-duplicate-folder-header="true"] {
+        display: none !important;
+      }
+
+      [data-merch-monk-child-list="true"] {
+        margin-top: 0 !important;
       }
 
       [data-merch-monk-outline-scrollbar="true"] {
@@ -232,7 +263,10 @@ function ensureTheatreOutlineViewport(attempt = 0) {
       );
     });
 
-    if (outline) bindTheatreOutline(outline, root);
+    if (outline) {
+      compactTheatreOutlineHierarchy(outline);
+      bindTheatreOutline(outline, root);
+    }
   };
 
   markOutlineScrollContainer();
