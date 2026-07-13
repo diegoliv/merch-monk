@@ -6,6 +6,7 @@ import { areTheatreObjectValuesEqual, getTheatreObject, theatreObjectName, type 
 import {
   copyTheatreObjectValue,
   copyTheatreObjectValueToBreakpoints,
+  downloadMinifiedTheatreProject,
   hideTheatreStudio,
   showTheatreStudio,
   setTheatreObjectValue,
@@ -259,7 +260,9 @@ export function SceneEditor() {
   const [responsiveStatus, setResponsiveStatus] = useState<ResponsiveStatus>(() => readResponsiveStatus(editor.selectedObject, activeBreakpoint));
   const [objectValue, setObjectValue] = useState<TheatreObjectValue>(() => getTheatreObject(editor.selectedObject, activeBreakpoint).value as TheatreObjectValue);
   const [controlsExpanded, setControlsExpanded] = useState(true);
-  const [expandedSections, setExpandedSections] = useState({ breakpoints: true, object: true, hover: true });
+  const [expandedSections, setExpandedSections] = useState({ breakpoints: true, object: true, hover: true, export: true });
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState("");
 
   useEffect(() => {
     if (editor.enabled) {
@@ -358,6 +361,20 @@ export function SceneEditor() {
     await copyTheatreObjectValueToBreakpoints(editor.selectedObject, activeBreakpoint, targetBreakpoints);
     await showTheatreStudio(editor.selectedObject, activeBreakpoint);
     setResponsiveStatus(readResponsiveStatus(editor.selectedObject, activeBreakpoint));
+  }
+
+  async function exportMinifiedProject() {
+    setIsExporting(true);
+    setExportStatus("");
+    try {
+      const result = await downloadMinifiedTheatreProject();
+      setExportStatus((result.bytes / 1024).toFixed(1) + " KB | TheatreJS-compatible JSON");
+    } catch (error) {
+      console.error("Could not export the minified Theatre project.", error);
+      setExportStatus("Export failed. Check the console for details.");
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   return (
@@ -514,6 +531,27 @@ export function SceneEditor() {
               <HoverControl label="Horizontal" min={0} max={0.9} step={0.01} value={editor.hoverTiltY} onChange={(hoverTiltY) => editorStore.setSelection({ hoverTiltY })} />
               <HoverControl label="Range" min={0.35} max={2.2} step={0.01} value={editor.hoverRange} onChange={(hoverRange) => editorStore.setSelection({ hoverRange })} />
               <HoverControl label="Smooth" min={0.04} max={0.35} step={0.01} value={editor.hoverFollow} onChange={(hoverFollow) => editorStore.setSelection({ hoverFollow })} />
+            </div>
+          </details>
+          <details
+            className="scene-control-section theatre-export-gui"
+            open={expandedSections.export}
+            onToggle={(event) => {
+              const open = event.currentTarget.open;
+              setExpandedSections((current) => ({ ...current, export: open }));
+            }}
+          >
+            <summary><span className="scene-section-summary-content">Export</span></summary>
+            <div className="scene-section-body theatre-export-actions">
+              <button
+                className="theatre-export-button"
+                type="button"
+                disabled={isExporting}
+                onClick={exportMinifiedProject}
+              >
+                {isExporting ? "Exporting..." : "Export minified JSON"}
+              </button>
+              <span className="theatre-export-status" aria-live="polite">{exportStatus}</span>
             </div>
           </details>
             </>

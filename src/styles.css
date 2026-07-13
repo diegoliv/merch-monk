@@ -577,6 +577,33 @@ main {
   background: rgba(255, 255, 255, 0.06);
   cursor: not-allowed;
 }
+
+.theatre-export-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.theatre-export-button {
+  min-height: 32px;
+  border: 1px solid rgba(255, 74, 9, 0.9);
+  border-radius: 6px;
+  color: #ffffff;
+  background: rgba(255, 74, 9, 0.88);
+  font: 900 11px/1 var(--font-body);
+  cursor: pointer;
+}
+
+.theatre-export-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.theatre-export-status {
+  min-height: 14px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10px;
+  line-height: 1.35;
+}
 .hover-gui-row + .hover-gui-row {
   margin-top: 8px;
 }

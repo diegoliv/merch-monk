@@ -475,6 +475,28 @@ export async function exportTheatreProject() {
   return studio.createContentOfSaveFile(theatreProjectId);
 }
 
+export function minifyTheatreProjectState(state: Record<string, unknown>) {
+  return JSON.stringify(state);
+}
+
+export async function downloadMinifiedTheatreProject(filename = "merch-monk-home_state.json") {
+  const state = await exportTheatreProject();
+  const content = minifyTheatreProjectState(state);
+  const blob = new Blob([content], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+  link.style.display = "none";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  requestAnimationFrame(() => URL.revokeObjectURL(url));
+
+  return { filename, bytes: blob.size };
+}
+
 
 
 
