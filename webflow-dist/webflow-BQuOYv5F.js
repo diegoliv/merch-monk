@@ -44235,7 +44235,7 @@ function jv(i) {
 }
 let _g = null, AE = !1;
 async function e0() {
-  _g || (_g = import("./index-dNe4qaRg.js").then((e) => e.i).then((e) => e.default));
+  _g || (_g = import("./index-DZ_YVAdz.js").then((e) => e.i).then((e) => e.default));
   const i = await _g;
   return AE || (i.initialize({ persistenceKey: "merch-monk-theatre-studio-neutral" }), AE = !0), i;
 }
@@ -44594,7 +44594,7 @@ function wz({ id: i, appliedRef: e, theatreValuesRef: t, pointerStateRef: n, loc
     if (i !== "crewneck" || !Ce) return;
     let Ve = !1;
     const te = new Image();
-    return te.decoding = "async", te.onload = () => {
+    return te.crossOrigin = "anonymous", te.decoding = "async", te.onload = () => {
       if (Ve) return;
       const gt = _z(te), Ze = kt.flatMap((ut) => ut instanceof rm ? [{
         material: ut,

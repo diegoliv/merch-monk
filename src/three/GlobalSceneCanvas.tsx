@@ -474,6 +474,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
 
     let cancelled = false;
     const image = new Image();
+    image.crossOrigin = "anonymous";
     image.decoding = "async";
     image.onload = () => {
       if (cancelled) return;
