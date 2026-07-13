@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { breakpointLabels, breakpoints, resolveBreakpointMode } from "./breakpoints";
 import { editorStore, useEditorStore } from "./editorStore";
-import { boxChildObjectIds, objectIds } from "./sceneObjects";
-import { areTheatreObjectValuesEqual, getTheatreObject, type TheatreObjectValue } from "./theatreProject";
+import { backgroundChildObjectIds, boxChildObjectIds, objectIds } from "./sceneObjects";
+import { areTheatreObjectValuesEqual, getTheatreObject, theatreObjectName, type TheatreObjectValue } from "./theatreProject";
 import {
   copyTheatreObjectValue,
   copyTheatreObjectValueToBreakpoints,
@@ -180,7 +180,7 @@ type TheatreTreeTarget = {
 
 const objectIdByTheatreLabel = new Map<string, ObjectId>(
   objectIds.flatMap((id) => {
-    const aliases = new Set([id, formatObjectId(id)]);
+    const aliases = new Set([id, formatObjectId(id), theatreObjectName(id)]);
     return Array.from(aliases, (alias) => [alias.toLowerCase(), id] as const);
   }),
 );
@@ -324,7 +324,9 @@ export function SceneEditor() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [editor.enabled]);
 
-  const isLayoutObject = !boxChildObjectIds.includes(editor.selectedObject as (typeof boxChildObjectIds)[number]);
+  const isBoxChild = boxChildObjectIds.includes(editor.selectedObject as (typeof boxChildObjectIds)[number]);
+  const isBackgroundChild = backgroundChildObjectIds.includes(editor.selectedObject as (typeof backgroundChildObjectIds)[number]);
+  const isLayoutObject = !isBoxChild && !isBackgroundChild;
 
   function updateLayout(value: Partial<TheatreObjectValue>) {
     void setTheatreObjectValue(editor.selectedObject, value, activeBreakpoint);
@@ -482,7 +484,7 @@ export function SceneEditor() {
                 </div>
               ) : (
                 <>
-                  <div className="responsive-local-transform-note">Local box transform</div>
+                  <div className="responsive-local-transform-note">{isBoxChild ? "Local box transform" : "Local background child transform"}</div>
                   <div className="responsive-actions">
                     <button type="button" disabled={activeBreakpoint === "desktop"} onClick={useDesktopForActiveObject}>Use Desktop</button>
                     <button type="button" onClick={sendActiveObjectToAllBreakpoints}>Send to All</button>

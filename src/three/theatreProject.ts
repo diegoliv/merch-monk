@@ -1,10 +1,10 @@
 import { getProject, types } from "@theatre/core";
 import type { ISheetObject, __UNSTABLE_Project_OnDiskState } from "@theatre/core";
 import { breakpoints } from "./breakpoints";
-import { boxChildObjectIds, objectIds } from "./sceneObjects";
+import { backgroundChildObjectIds, backgroundParentByChild, boxChildObjectIds, objectIds } from "./sceneObjects";
 import { sceneTimeline } from "./sceneTimeline";
 import productionTheatreStateJson from "./merch-monk-home.theatre-project-state.json";
-import type { Breakpoint, ObjectId } from "./types";
+import type { BackgroundChildObjectId, BackgroundObjectId, Breakpoint, ObjectId } from "./types";
 import { prepareTheatreState } from "./theatreStateMigration";
 
 export type TheatreObjectValue = {
@@ -20,6 +20,17 @@ export type TheatreObjectValue = {
 
 export const theatreProjectId = "Merch Monk Scene Responsive";
 export const theatreSequenceLength = sceneTimeline.length;
+const backgroundDefaultPositions: Record<BackgroundObjectId, { x: number; y: number }> = {
+  bg_tote: { x: -24, y: -24 },
+  bg_cup: { x: -24, y: 0 },
+  bg_notebook: { x: -24, y: 24 },
+  bg_umbrela: { x: 0, y: -24 },
+  bg_notebook_2: { x: 0, y: 0 },
+  "bg_flip-flop": { x: 0, y: 24 },
+  bg_cap: { x: 24, y: -24 },
+  bg_crewneck: { x: 24, y: 0 },
+  bg_sweatpants: { x: 24, y: 24 },
+};
 
 const productionTheatreState = prepareTheatreState((
   window.MerchMonkWebflow?.theatreState ?? productionTheatreStateJson
@@ -38,7 +49,23 @@ export const theatreSheets = Object.fromEntries(
 export const theatreSheet = theatreSheets.desktop;
 
 function theatreDefaults(id?: ObjectId): TheatreObjectValue {
-  if (id && boxChildObjectIds.includes(id as (typeof boxChildObjectIds)[number])) {
+  const backgroundPosition = id ? backgroundDefaultPositions[id as BackgroundObjectId] : undefined;
+  if (backgroundPosition) {
+    return {
+      anchor: { x: 50, y: 50 },
+      position: { x: backgroundPosition.x, y: backgroundPosition.y, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: 10,
+      opacity: 1,
+      visible: true,
+    };
+  }
+  if (
+    id && (
+      boxChildObjectIds.includes(id as (typeof boxChildObjectIds)[number]) ||
+      backgroundChildObjectIds.includes(id as BackgroundChildObjectId)
+    )
+  ) {
     return {
       anchor: { x: 50, y: 50 },
       position: { x: 0, y: 0, z: 0 },
@@ -69,8 +96,10 @@ function theatreDefaults(id?: ObjectId): TheatreObjectValue {
   };
 }
 
-function theatreObjectName(id: ObjectId) {
-  return boxChildObjectIds.includes(id as (typeof boxChildObjectIds)[number]) ? `box/${id}` : id;
+export function theatreObjectName(id: ObjectId) {
+  if (boxChildObjectIds.includes(id as (typeof boxChildObjectIds)[number])) return `> ${id}`;
+  if (backgroundChildObjectIds.includes(id as BackgroundChildObjectId)) return `> ${id}`;
+  return id;
 }
 
 function createTheatreObject(id: ObjectId, sheet = theatreSheet) {

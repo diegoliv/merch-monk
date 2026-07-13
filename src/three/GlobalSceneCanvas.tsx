@@ -5,7 +5,15 @@ import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.j
 import * as THREE from "three";
 import { resolveBreakpointMode } from "./breakpoints";
 import { anchorToWorld, applyViewport, worldOffsetToPercent, worldScaleToPercent } from "./math";
-import { boxChildObjectIds, objectIds, renderObjectIds } from "./sceneObjects";
+import {
+  backgroundChildByParent,
+  backgroundChildObjectIds,
+  backgroundObjectIds,
+  backgroundParentByChild,
+  boxChildObjectIds,
+  objectIds,
+  renderObjectIds,
+} from "./sceneObjects";
 import { editorStore, useEditorStore } from "./editorStore";
 import { getTheatreObject, getTheatreObjects, theatreProject, type TheatreObjectValue, valueToSceneState } from "./theatreProject";
 import { selectTheatreObject, setTheatreObjectValue } from "./theatreStudio";
@@ -13,7 +21,7 @@ import { useSceneProgress } from "./useSceneProgress";
 import { useViewportInfo } from "./useViewportInfo";
 import type { ProductCupColorValue, ProductCupDecorationMethod } from "../components/StorySections";
 import { useExperienceRuntime } from "../experienceRuntime";
-import type { AppliedSceneState, BoxChildObjectId, Breakpoint, ObjectId } from "./types";
+import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, BoxChildObjectId, Breakpoint, ObjectId } from "./types";
 
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
 const crewneckLogoPath = new URL("../textures/crewneck-logo.avif", new URL(modelPath, window.location.href)).href;
@@ -25,6 +33,7 @@ const entranceStagger = 0.05;
 
 type TheatreValues = Record<ObjectId, TheatreObjectValue>;
 type BoxChildValues = Record<BoxChildObjectId, TheatreObjectValue>;
+type BackgroundChildValues = Record<BackgroundChildObjectId, TheatreObjectValue>;
 type PointerState = { clientX: number; clientY: number; active: boolean; scrolling: boolean };
 type PerformanceDebug = {
   frames: number;
@@ -109,6 +118,13 @@ type RestTransform = {
 function isBoxChildObjectId(id: ObjectId): id is BoxChildObjectId {
   return boxChildObjectIds.includes(id as BoxChildObjectId);
 }
+function isBackgroundObjectId(id: ObjectId): id is BackgroundObjectId {
+  return backgroundObjectIds.includes(id as BackgroundObjectId);
+}
+
+function isBackgroundChildObjectId(id: ObjectId): id is BackgroundChildObjectId {
+  return backgroundChildObjectIds.includes(id as BackgroundChildObjectId);
+}
 
 function tuneMaterial(material: THREE.Material) {
   const named = material.name.toLowerCase();
@@ -127,7 +143,11 @@ function tuneMaterial(material: THREE.Material) {
   material.needsUpdate = true;
 }
 
-function cloneNode(node: THREE.Object3D, centerPivot = false) {
+function cloneNode(
+  node: THREE.Object3D,
+  centerPivot = false,
+  backgroundChildId?: BackgroundChildObjectId | null,
+) {
   const cloned = cloneSkeleton(node);
   cloned.traverse((child) => {
     if ("material" in child) {
@@ -153,6 +173,34 @@ function cloneNode(node: THREE.Object3D, centerPivot = false) {
     cloned.updateMatrixWorld(true);
   }
 
+  if (backgroundChildId !== undefined) {
+    const composite = new THREE.Group();
+    composite.name = `${node.name}_background`;
+    composite.add(cloned);
+    composite.updateMatrixWorld(true);
+
+    const child = backgroundChildId ? cloned.getObjectByName(backgroundChildId) : null;
+    if (child) composite.attach(child);
+
+
+    composite.updateMatrixWorld(true);
+
+    const backgroundBounds = new THREE.Box3().setFromObject(cloned);
+    if (child) {
+      const childBounds = new THREE.Box3().setFromObject(child);
+      child.position.z += backgroundBounds.max.z - childBounds.min.z + 0.02;
+      child.updateMatrixWorld(true);
+    }
+
+    const center = backgroundBounds.getCenter(new THREE.Vector3());
+    const wrapper = new THREE.Group();
+    wrapper.name = `${node.name}_centered`;
+    composite.position.sub(center);
+    wrapper.add(composite);
+    wrapper.updateMatrixWorld(true);
+    return wrapper;
+  }
+
   if (!centerPivot) return cloned;
 
   const centeredBounds = new THREE.Box3().setFromObject(cloned);
@@ -164,7 +212,6 @@ function cloneNode(node: THREE.Object3D, centerPivot = false) {
   wrapper.updateMatrixWorld(true);
   return wrapper;
 }
-
 function getInitialTrackValue(root: THREE.Object3D, track: THREE.KeyframeTrack) {
   const suffixes = [
     { suffix: ".position", property: "position" },
@@ -385,6 +432,40 @@ function applyBoxChildStates(
     setOpacity(childMaterials[childId] ?? [], opacity);
   });
 }
+
+function applyBackgroundChildState(
+  root: THREE.Object3D,
+  parentId: BackgroundObjectId,
+  childValues: BackgroundChildValues,
+  rest: RestTransform | undefined,
+  childMaterials: THREE.Material[],
+  parentOpacity: number,
+  float: number,
+  tiltQuaternion: THREE.Quaternion,
+  rotationEuler: THREE.Euler,
+  rotationQuaternion: THREE.Quaternion,
+) {
+  const childId = backgroundChildByParent[parentId];
+  if (!childId || !rest) return;
+
+  const target = root.getObjectByName(childId);
+  const value = childValues[childId];
+  if (!target || !value) return;
+
+  target.position.set(
+    rest.position.x + value.position.x,
+    rest.position.y + value.position.y + float,
+    rest.position.z + value.position.z,
+  );
+  rotationEuler.set(value.rotation.x, value.rotation.y, value.rotation.z, "XYZ");
+  rotationQuaternion.setFromEuler(rotationEuler);
+  target.quaternion.copy(rest.quaternion).multiply(rotationQuaternion).premultiply(tiltQuaternion);
+  target.scale.set(rest.scale.x * value.scale, rest.scale.y * value.scale, rest.scale.z * value.scale);
+  const opacity = value.opacity * parentOpacity;
+  target.visible = value.visible && opacity > 0.01;
+  setOpacity(childMaterials, opacity);
+}
+
 function initialTheatreValues(breakpoint: Breakpoint): TheatreValues {
   const objects = getTheatreObjects(breakpoint);
 
@@ -441,7 +522,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
   const phase = useMemo(() => objectIds.indexOf(id) * 0.45, [id]);
   const object = useMemo(() => {
     const node = scene.getObjectByName(modelNodeNames[id] ?? id);
-    return node ? cloneNode(node, id === "box") : null;
+    return node ? cloneNode(node, id === "box", isBackgroundObjectId(id) ? backgroundChildByParent[id] ?? null : undefined) : null;
   }, [id, scene]);
   const boxAnimationClip = useMemo(() => (id === "box" && object ? createBoxAnimationClip(object, animations) : null), [animations, id, object]);
   const boxChildRestTransforms = useMemo(() => {
@@ -460,7 +541,34 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
       return transforms;
     }, {} as Partial<Record<BoxChildObjectId, RestTransform>>);
   }, [id, object]);
+  const backgroundChildId = isBackgroundObjectId(id) ? backgroundChildByParent[id] : undefined;
+  const backgroundChildRestTransform = useMemo(() => {
+    if (!backgroundChildId || !object) return undefined;
+    const child = object.getObjectByName(backgroundChildId);
+    if (!child) return undefined;
+    const rest = {
+      position: child.position.clone(),
+      quaternion: child.quaternion.clone(),
+      scale: child.scale.clone(),
+    };
+    child.userData.restTransform = rest;
+    return rest;
+  }, [backgroundChildId, object]);
   const materials = useMemo(() => (object ? collectMaterials(object) : []), [object]);
+  const backgroundChildMaterials = useMemo(() => {
+    if (!backgroundChildId || !object) return [];
+    const child = object.getObjectByName(backgroundChildId);
+    if (!child) return [];
+    child.traverse((descendant) => {
+      descendant.renderOrder = 10;
+    });
+    return collectMaterials(child).map((material) => {
+      material.depthTest = false;
+      material.depthWrite = false;
+      material.needsUpdate = true;
+      return material;
+    });
+  }, [backgroundChildId, object]);
   const boxChildMaterials = useMemo(() => {
     if (id !== "box" || !object) return {};
     return boxChildObjectIds.reduce((result, childId) => {
@@ -559,12 +667,18 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     if (!groupRef.current) return;
     const state = appliedRef.current[id];
     if (!state) return;
-    groupRef.current.position.set(state.worldPosition[0], state.worldPosition[1] + float, state.worldPosition[2]);
+    const isBackground = isBackgroundObjectId(id);
+    groupRef.current.position.set(
+      state.worldPosition[0],
+      state.worldPosition[1] + (isBackground ? 0 : float),
+      state.worldPosition[2],
+    );
     baseEulerRef.current.set(state.rotation[0], state.rotation[1], state.rotation[2], "XYZ");
     baseQuaternionRef.current.setFromEuler(baseEulerRef.current);
     globalTiltEulerRef.current.set(tilt.x, tilt.y, 0, "XYZ");
     globalTiltQuaternionRef.current.setFromEuler(globalTiltEulerRef.current);
-    groupRef.current.quaternion.copy(baseQuaternionRef.current).premultiply(globalTiltQuaternionRef.current);
+    groupRef.current.quaternion.copy(baseQuaternionRef.current);
+    if (!isBackground) groupRef.current.quaternion.premultiply(globalTiltQuaternionRef.current);
     groupRef.current.scale.setScalar(state.scale * entranceScale);
     groupRef.current.visible = state.visible && state.opacity > 0.01;
     if (object) {
@@ -583,6 +697,21 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
           childRotationQuaternionRef.current,
         );
       }
+      if (isBackground) {
+        applyBackgroundChildState(
+          object,
+          id,
+          theatreValuesRef.current as BackgroundChildValues,
+          backgroundChildRestTransform,
+          backgroundChildMaterials,
+          state.opacity,
+          float,
+          globalTiltQuaternionRef.current,
+          childRotationEulerRef.current,
+          childRotationQuaternionRef.current,
+        );
+
+      }
       if (id === "crewneck") {
         const showLogo = theatreValuesRef.current.crewneck.showLogo === true;
         if (lastShowLogoRef.current !== showLogo) {
@@ -599,11 +728,19 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
       return;
     }
 
+    if (
+      isBackgroundChildObjectId(selectedObjectId) &&
+      backgroundParentByChild[selectedObjectId] === id &&
+      object
+    ) {
+      setSelectedRef(object.getObjectByName(selectedObjectId) ?? null);
+      return;
+    }
+
     if (selectedObjectId === id && groupRef.current) {
       setSelectedRef(groupRef.current);
     }
   }, [id, object, selectedObjectId, setSelectedRef]);
-
   useEffect(() => {
     if (!object || !boxAnimationClip) {
       mixerRef.current = null;
@@ -662,18 +799,34 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     }
 
     const float = Math.sin(clock.elapsedTime * 0.55 + phase) * 0.045;
+    const motionObject = backgroundChildId
+      ? object?.getObjectByName(backgroundChildId) ?? null
+      : isBackgroundObjectId(id)
+        ? null
+        : groupRef.current;
+    const motionValue = backgroundChildId ? theatreValuesRef.current[backgroundChildId] : state;
 
-    if (!groupRef.current || !object || !state.visible || state.opacity <= 0.08 || !pointerState.active || pointerState.scrolling) {
+    if (
+      !groupRef.current ||
+      !object ||
+      !motionObject ||
+      !state.visible ||
+      state.opacity <= 0.08 ||
+      !motionValue?.visible ||
+      motionValue.opacity <= 0.08 ||
+      !pointerState.active ||
+      pointerState.scrolling
+    ) {
       targetTiltRef.current.set(0, 0);
     } else {
-      groupRef.current.updateMatrixWorld();
+      groupRef.current.updateMatrixWorld(true);
       raycasterRef.current.setFromCamera(pointerRef.current, camera);
 
-      const isPointerOverObject = raycasterRef.current.intersectObject(groupRef.current, true).length > 0;
+      const isPointerOverObject = raycasterRef.current.intersectObject(motionObject, true).length > 0;
       if (isPointerOverObject) {
         targetTiltRef.current.set(0, 0);
       } else {
-        boxRef.current.setFromObject(groupRef.current);
+        boxRef.current.setFromObject(motionObject);
         boxRef.current.getCenter(centerRef.current).project(camera);
 
         const horizontal = pointerRef.current.x - centerRef.current.x;
@@ -711,6 +864,18 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
             editorStore.setSelection({ selectedObject: clicked.name as BoxChildObjectId });
             setSelectedRef(clicked);
             void selectTheatreObject(clicked.name as BoxChildObjectId, activeBreakpoint);
+            return;
+          }
+          if (clicked === object) break;
+          clicked = clicked.parent;
+        }
+
+        clicked = event.object;
+        while (backgroundChildId && object && clicked) {
+          if (clicked.name === backgroundChildId) {
+            editorStore.setSelection({ selectedObject: backgroundChildId });
+            setSelectedRef(clicked);
+            void selectTheatreObject(backgroundChildId, activeBreakpoint);
             return;
           }
           if (clicked === object) break;
@@ -857,7 +1022,7 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
     const object = getTheatreObject(editor.selectedObject, activeBreakpoint);
     const current = object.value;
 
-    if (isBoxChildObjectId(editor.selectedObject)) {
+    if (isBoxChildObjectId(editor.selectedObject) || isBackgroundChildObjectId(editor.selectedObject)) {
       const rest = selectedObject.userData.restTransform as RestTransform | undefined;
       if (!rest) return;
 
@@ -927,7 +1092,11 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
           appliedRef={appliedRef}
           theatreValuesRef={theatreValuesRef}
           pointerStateRef={pointerStateRef}
-          lockMotion={editor.enabled && (editor.selectedObject === id || (id === "box" && isBoxChildObjectId(editor.selectedObject)))}
+          lockMotion={editor.enabled && (
+            editor.selectedObject === id ||
+            (id === "box" && isBoxChildObjectId(editor.selectedObject)) ||
+            (isBackgroundChildObjectId(editor.selectedObject) && backgroundParentByChild[editor.selectedObject] === id)
+          )}
           selectedObjectId={editor.selectedObject}
           editorEnabled={editor.enabled}
           hoverTiltX={editor.hoverTiltX}
@@ -944,7 +1113,7 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
           entranceStartRef={entranceStartRef}
         />
       ))}
-      {editor.enabled && selectedObject && (renderObjectIds.includes(editor.selectedObject) || isBoxChildObjectId(editor.selectedObject)) ? (
+      {editor.enabled && selectedObject && (renderObjectIds.includes(editor.selectedObject) || isBoxChildObjectId(editor.selectedObject) || isBackgroundChildObjectId(editor.selectedObject)) ? (
         <TransformControls object={selectedObject} mode={editor.mode} size={0.8} onObjectChange={saveTransform} />
       ) : null}
     </>

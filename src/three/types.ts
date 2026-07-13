@@ -2,6 +2,27 @@ export type Breakpoint = "mobile" | "tablet" | "desktop";
 
 export type BoxChildObjectId = "cap_box" | "cup_box" | "notebook_box";
 
+export type BackgroundObjectId =
+  | "bg_tote"
+  | "bg_cup"
+  | "bg_notebook"
+  | "bg_umbrela"
+  | "bg_notebook_2"
+  | "bg_cap"
+  | "bg_crewneck"
+  | "bg_flip-flop"
+  | "bg_sweatpants";
+
+export type BackgroundChildObjectId =
+  | "tote.001"
+  | "cup.001"
+  | "notebook.001"
+  | "umbrela_closed.001"
+  | "notebook.002"
+  | "cap.001"
+  | "flip_flop.001"
+  | "sweatpant.001";
+
 export type ObjectId =
   | "tote"
   | "cup"
@@ -14,7 +35,9 @@ export type ObjectId =
   | BoxChildObjectId
   | "flip_flop"
   | "crewneck"
-  | "sweatpant";
+  | "sweatpant"
+  | BackgroundObjectId
+  | BackgroundChildObjectId;
 
 export type Vec3 = [number, number, number];
 

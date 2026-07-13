@@ -1,5 +1,5 @@
 import type { __UNSTABLE_Project_OnDiskState } from "@theatre/core";
-import { renderObjectIds } from "./sceneObjects";
+import { backgroundChildObjectIds, backgroundParentByChild, boxChildObjectIds, renderObjectIds } from "./sceneObjects";
 
 export const merchMonkLayoutVersion = 1;
 
@@ -13,6 +13,17 @@ type LayoutState = __UNSTABLE_Project_OnDiskState & {
   __merchMonkLayoutVersion?: number;
   sheetsById: Record<string, SerializableRecord>;
 };
+
+const compactObjectNameByLegacyName = Object.fromEntries([
+  ...boxChildObjectIds.flatMap((childId) => [
+    [`box / ${childId}`, `> ${childId}`],
+    [`box > ${childId}`, `> ${childId}`],
+  ]),
+  ...backgroundChildObjectIds.flatMap((childId) => [
+    [`${backgroundParentByChild[childId]} / ${childId}`, `> ${childId}`],
+    [`${backgroundParentByChild[childId]} > ${childId}`, `> ${childId}`],
+  ]),
+]) as Record<string, string>;
 
 function isRecord(value: unknown): value is SerializableRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -111,6 +122,29 @@ function stateUsesResponsiveUnits(state: LayoutState) {
   });
 }
 
+function migrateCompactObjectNames(state: LayoutState) {
+  Object.values(state.sheetsById).forEach((sheet) => {
+    if (!isRecord(sheet)) return;
+
+    const staticOverrides = sheet.staticOverrides;
+    if (isRecord(staticOverrides) && isRecord(staticOverrides.byObject)) {
+      migrateObjectNamesInRecord(staticOverrides.byObject);
+    }
+
+    const sequence = sheet.sequence;
+    if (isRecord(sequence) && isRecord(sequence.tracksByObject)) {
+      migrateObjectNamesInRecord(sequence.tracksByObject);
+    }
+  });
+}
+
+function migrateObjectNamesInRecord(record: SerializableRecord) {
+  Object.entries(compactObjectNameByLegacyName).forEach(([legacyName, compactName]) => {
+    if (!(legacyName in record)) return;
+    if (!(compactName in record)) record[compactName] = record[legacyName];
+    delete record[legacyName];
+  });
+}
 function ensureResponsiveSheets(state: LayoutState) {
   const desktop = state.sheetsById["Scroll Scene"];
   if (!isRecord(desktop)) return;
@@ -130,6 +164,7 @@ export function prepareTheatreState(source: __UNSTABLE_Project_OnDiskState) {
     });
     state.__merchMonkLayoutVersion = merchMonkLayoutVersion;
   }
+  migrateCompactObjectNames(state);
   ensureResponsiveSheets(state);
   delete state.__merchMonkLayoutVersion;
   return state as __UNSTABLE_Project_OnDiskState;

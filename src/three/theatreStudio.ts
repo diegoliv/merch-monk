@@ -60,6 +60,190 @@ type TheatreStateEditors = {
 let studioPromise: Promise<Studio> | null = null;
 let initialized = false;
 
+const theatreOutlineStyleId = "merch-monk-theatre-outline-style";
+let theatreOutlineRoot: ShadowRoot | null = null;
+let theatreOutlineObserver: MutationObserver | null = null;
+let theatreOutlineElement: HTMLElement | null = null;
+let theatreOutlineTrack: HTMLElement | null = null;
+let theatreOutlineThumb: HTMLElement | null = null;
+let theatreOutlineResizeObserver: ResizeObserver | null = null;
+
+function syncTheatreOutlineScrollbar() {
+  const outline = theatreOutlineElement;
+  const track = theatreOutlineTrack;
+  const thumb = theatreOutlineThumb;
+  if (!outline || !track || !thumb) return;
+
+  const rect = outline.getBoundingClientRect();
+  const maxScroll = Math.max(0, outline.scrollHeight - outline.clientHeight);
+  if (rect.height <= 0 || maxScroll <= 1) {
+    track.style.display = "none";
+    return;
+  }
+
+  const trackHeight = rect.height;
+  const thumbHeight = Math.max(40, trackHeight * (outline.clientHeight / outline.scrollHeight));
+  const thumbTravel = Math.max(0, trackHeight - thumbHeight);
+  const thumbTop = maxScroll > 0 ? (outline.scrollTop / maxScroll) * thumbTravel : 0;
+
+  track.style.display = "block";
+  track.style.left = `${Math.max(0, rect.right - 10)}px`;
+  track.style.top = `${rect.top}px`;
+  track.style.height = `${trackHeight}px`;
+  thumb.style.height = `${thumbHeight}px`;
+  thumb.style.transform = `translateY(${thumbTop}px)`;
+}
+
+function ensureTheatreOutlineTrack(root: ShadowRoot) {
+  let track = root.querySelector<HTMLElement>('[data-merch-monk-outline-scrollbar="true"]');
+  if (track) {
+    theatreOutlineTrack = track;
+    theatreOutlineThumb = track.querySelector<HTMLElement>('[data-merch-monk-outline-thumb="true"]');
+    return;
+  }
+
+  track = document.createElement("div");
+  track.dataset.merchMonkOutlineScrollbar = "true";
+  const thumb = document.createElement("div");
+  thumb.dataset.merchMonkOutlineThumb = "true";
+  track.append(thumb);
+  root.append(track);
+  theatreOutlineTrack = track;
+  theatreOutlineThumb = thumb;
+
+  track.addEventListener("pointerdown", (event) => {
+    const outline = theatreOutlineElement;
+    if (!outline || event.target === thumb) return;
+    const rect = track!.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(rect.height, 1)));
+    outline.scrollTop = ratio * Math.max(0, outline.scrollHeight - outline.clientHeight);
+  });
+
+  thumb.addEventListener("pointerdown", (event) => {
+    const outline = theatreOutlineElement;
+    if (!outline) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startY = event.clientY;
+    const startScrollTop = outline.scrollTop;
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const maxScroll = Math.max(0, outline.scrollHeight - outline.clientHeight);
+      const travel = Math.max(1, track!.clientHeight - thumb.clientHeight);
+      outline.scrollTop = startScrollTop + ((moveEvent.clientY - startY) / travel) * maxScroll;
+    };
+    const onPointerUp = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  });
+}
+
+function bindTheatreOutline(outline: HTMLElement, root: ShadowRoot) {
+  ensureTheatreOutlineTrack(root);
+  if (theatreOutlineElement === outline) {
+    syncTheatreOutlineScrollbar();
+    return;
+  }
+
+  theatreOutlineElement?.removeEventListener("scroll", syncTheatreOutlineScrollbar);
+  theatreOutlineResizeObserver?.disconnect();
+  theatreOutlineElement = outline;
+  outline.dataset.merchMonkOutlineScroll = "true";
+  outline.addEventListener("scroll", syncTheatreOutlineScrollbar, { passive: true });
+  theatreOutlineResizeObserver = new ResizeObserver(syncTheatreOutlineScrollbar);
+  theatreOutlineResizeObserver.observe(outline);
+  const list = outline.firstElementChild;
+  if (list instanceof HTMLElement) theatreOutlineResizeObserver.observe(list);
+  syncTheatreOutlineScrollbar();
+}
+
+function ensureTheatreOutlineViewport(attempt = 0) {
+  if (typeof document === "undefined") return;
+
+  const root = document.getElementById("theatrejs-studio-root")?.shadowRoot;
+  if (!root) {
+    if (attempt < 120) requestAnimationFrame(() => ensureTheatreOutlineViewport(attempt + 1));
+    return;
+  }
+
+  if (!root.getElementById(theatreOutlineStyleId)) {
+    const style = document.createElement("style");
+    style.id = theatreOutlineStyleId;
+    style.textContent = `
+      [data-merch-monk-outline-scroll="true"] {
+        max-height: calc(100dvh - 64px) !important;
+        overflow-y: scroll !important;
+        overscroll-behavior-y: contain;
+        scrollbar-width: none;
+        padding-bottom: 8px;
+      }
+
+      [data-merch-monk-outline-scroll="true"]::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+      }
+
+      [data-merch-monk-outline-scrollbar="true"] {
+        position: fixed;
+        display: none;
+        width: 8px;
+        padding: 2px;
+        background: rgba(10, 10, 10, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 999px;
+        box-sizing: border-box;
+        pointer-events: auto;
+        z-index: 2147483647;
+        cursor: pointer;
+      }
+
+      [data-merch-monk-outline-thumb="true"] {
+        width: 100%;
+        min-height: 40px;
+        background: #ff4a09;
+        border-radius: 999px;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+        cursor: grab;
+      }
+
+      [data-merch-monk-outline-thumb="true"]:active {
+        cursor: grabbing;
+        background: #ff6a32;
+      }
+    `;
+    root.append(style);
+  }
+
+  const markOutlineScrollContainer = () => {
+    const outline = Array.from(root.querySelectorAll<HTMLElement>("div")).find((element) => {
+      const rect = element.getBoundingClientRect();
+      const overflowY = getComputedStyle(element).overflowY;
+      return (
+        rect.x <= 16 &&
+        rect.y >= 40 &&
+        rect.width >= 150 &&
+        rect.width <= 360 &&
+        (overflowY === "scroll" || overflowY === "auto") &&
+        element.textContent?.includes(theatreProjectId)
+      );
+    });
+
+    if (outline) bindTheatreOutline(outline, root);
+  };
+
+  markOutlineScrollContainer();
+  if (theatreOutlineRoot !== root) {
+    theatreOutlineObserver?.disconnect();
+    theatreOutlineRoot = root;
+    theatreOutlineObserver = new MutationObserver(markOutlineScrollContainer);
+    theatreOutlineObserver.observe(root, { childList: true, subtree: true });
+  }
+}
+
 async function loadStudio() {
   if (!studioPromise) {
     studioPromise = import("@theatre/studio").then((module) => module.default);
@@ -70,6 +254,7 @@ async function loadStudio() {
     studio.initialize({ persistenceKey: "merch-monk-theatre-studio-neutral" });
     initialized = true;
   }
+  ensureTheatreOutlineViewport();
   return studio;
 }
 
