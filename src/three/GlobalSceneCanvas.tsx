@@ -21,6 +21,7 @@ import { useSceneProgress } from "./useSceneProgress";
 import { useViewportInfo } from "./useViewportInfo";
 import type { ProductCupColorValue, ProductCupDecorationMethod } from "../components/StorySections";
 import { useExperienceRuntime } from "../experienceRuntime";
+import { configureSceneRenderer, studioEnvironmentPreset, tuneMaterial } from "./sceneAppearance";
 import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, BoxChildObjectId, Breakpoint, ObjectId } from "./types";
 
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
@@ -126,22 +127,6 @@ function isBackgroundChildObjectId(id: ObjectId): id is BackgroundChildObjectId 
   return backgroundChildObjectIds.includes(id as BackgroundChildObjectId);
 }
 
-function tuneMaterial(material: THREE.Material) {
-  const named = material.name.toLowerCase();
-  const pbr = material as THREE.MeshStandardMaterial;
-
-  if (named.includes("orange")) {
-    if ("roughness" in pbr) pbr.roughness = Math.max(pbr.roughness ?? 0, 0.78);
-    if ("metalness" in pbr) pbr.metalness = Math.min(pbr.metalness ?? 0, 0.04);
-    if ("envMapIntensity" in pbr) pbr.envMapIntensity = 0.62;
-    if ("color" in pbr) pbr.color.lerp(new THREE.Color("#ff4a09"), 0.22);
-  } else if ("roughness" in pbr) {
-    pbr.roughness = Math.max(pbr.roughness ?? 0, 0.55);
-    if ("envMapIntensity" in pbr) pbr.envMapIntensity = 0.78;
-  }
-
-  material.needsUpdate = true;
-}
 
 function cloneNode(
   node: THREE.Object3D,
@@ -1084,7 +1069,7 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
         near={0.01}
         far={100}
       />
-      <Environment preset="apartment" background={false} />
+      <Environment preset={studioEnvironmentPreset} background={false} />
       {renderObjectIds.map((id) => (
         <MerchObject
           key={id}
@@ -1137,9 +1122,7 @@ export function GlobalSceneCanvas({ productCupColor, productCupArtworkUrl = null
         gl={{ antialias: true, alpha: true }}
         dpr={[1, 2]}
         onCreated={({ gl, scene }) => {
-          gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 0.82;
-          scene.environmentIntensity = 0.82;
+          configureSceneRenderer(gl, scene);
         }}
       >
         {performanceDebugEnabled ? <PerformanceProbe /> : null}
