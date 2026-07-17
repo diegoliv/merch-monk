@@ -34,7 +34,8 @@ import { configureSceneRenderer, studioEnvironmentPreset, tuneMaterial } from ".
 import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, BoxChildObjectId, Breakpoint, ObjectId, Vec3, ViewportInfo } from "./types";
 
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
-const crewneckLogoPath = new URL("../textures/crewneck-logo.avif", new URL(modelPath, window.location.href)).href;
+const crewneckLogoPath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5527787af01c167ce42d3c_f488968c6e31020e99fcf5deeeb44ad6_crewneck-logo.avif";
+const productCupTexturePath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a50e9004a86969bdfa1d014_cup-body-logo.avif";
 const boxTexturePath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5a88f85ff267f9a82727a8_box_body.avif";
 const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones", product_cup: "cup" };
 const boxAnimationNames = new Set(["box_open"]);
@@ -597,7 +598,6 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
   const { camera, gl } = useThree();
   const groupRef = useRef<THREE.Group | null>(null);
   const pointerRef = useRef(new THREE.Vector2());
-  const raycasterRef = useRef(new THREE.Raycaster());
   const tiltRef = useRef(new THREE.Vector2());
   const targetTiltRef = useRef(new THREE.Vector2());
   const baseEulerRef = useRef(new THREE.Euler());
@@ -766,9 +766,8 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     let cancelled = false;
     let colorTexture: THREE.CanvasTexture | null = null;
     let bumpTexture: THREE.CanvasTexture | null = null;
+    const artworkUrl = productCupArtworkUrl ?? productCupTexturePath;
     applyProductCupMaterial(object, productCupColor, productCupDecorationMethod);
-
-    if (!productCupArtworkUrl) return;
 
     const image = new Image();
     image.crossOrigin = "anonymous";
@@ -782,9 +781,9 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
       applyProductCupMaterial(object, productCupColor, productCupDecorationMethod, colorTexture, bumpTexture);
     };
     image.onerror = () => {
-      if (!cancelled) console.warn(`[Merch Monk] Could not load product cup artwork: ${productCupArtworkUrl}`);
+      if (!cancelled) console.warn(`[Merch Monk] Could not load product cup artwork: ${artworkUrl}`);
     };
-    image.src = productCupArtworkUrl;
+    image.src = artworkUrl;
 
     return () => {
       cancelled = true;
@@ -964,25 +963,18 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
       targetTiltRef.current.set(0, 0);
     } else {
       groupRef.current.updateMatrixWorld(true);
-      raycasterRef.current.setFromCamera(pointerRef.current, camera);
+      boxRef.current.setFromObject(motionObject);
+      boxRef.current.getCenter(centerRef.current).project(camera);
 
-      const isPointerOverObject = raycasterRef.current.intersectObject(motionObject, true).length > 0;
-      if (isPointerOverObject) {
+      const horizontal = pointerRef.current.x - centerRef.current.x;
+      const vertical = pointerRef.current.y - centerRef.current.y;
+      const distance = Math.hypot(horizontal, vertical);
+      const influence = THREE.MathUtils.clamp(distance / hoverRange, 0, 1);
+
+      if (distance < 0.001) {
         targetTiltRef.current.set(0, 0);
       } else {
-        boxRef.current.setFromObject(motionObject);
-        boxRef.current.getCenter(centerRef.current).project(camera);
-
-        const horizontal = pointerRef.current.x - centerRef.current.x;
-        const vertical = pointerRef.current.y - centerRef.current.y;
-        const distance = Math.hypot(horizontal, vertical);
-        const influence = THREE.MathUtils.clamp(distance / hoverRange, 0, 1);
-
-        if (distance < 0.001) {
-          targetTiltRef.current.set(0, 0);
-        } else {
-          targetTiltRef.current.set((-vertical / distance) * influence * hoverTiltX, (horizontal / distance) * influence * hoverTiltY);
-        }
+        targetTiltRef.current.set((-vertical / distance) * influence * hoverTiltX, (horizontal / distance) * influence * hoverTiltY);
       }
     }
 
