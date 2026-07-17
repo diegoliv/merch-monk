@@ -1,6 +1,7 @@
 import { getProject, types } from "@theatre/core";
 import type { ISheetObject, __UNSTABLE_Project_OnDiskState } from "@theatre/core";
 import { breakpoints } from "./breakpoints";
+import { crewneckGridDefaults, type CrewneckGridSettings } from "./backgroundGridLayout";
 import { backgroundChildObjectIds, backgroundParentByChild, boxChildObjectIds, objectIds } from "./sceneObjects";
 import { sceneTimeline } from "./sceneTimeline";
 import productionTheatreStateJson from "./merch-monk-home.theatre-project-state.json";
@@ -15,6 +16,7 @@ export type TheatreObjectValue = {
   opacity: number;
   visible: boolean;
   showLogo?: boolean;
+  grid?: CrewneckGridSettings;
   boxAnimationProgress?: number;
 };
 
@@ -125,7 +127,17 @@ function createTheatreObject(id: ObjectId, sheet = theatreSheet) {
     scale: types.number(defaults.scale, { range: [0, 100] }),
     opacity: types.number(defaults.opacity, { range: [0, 1] }),
     visible: defaults.visible,
-    ...(id === "crewneck" ? { showLogo: types.boolean(false, { label: "Show Logo" }) } : {}),
+    ...(id === "crewneck" ? {
+      showLogo: types.boolean(false, { label: "Show Logo" }),
+      grid: {
+        follow: types.number(crewneckGridDefaults.follow, { range: [0, 1], label: "Grid Follow" }),
+        offset: {
+          x: types.number(crewneckGridDefaults.offset.x, { range: [-100, 100], label: "Offset X" }),
+          y: types.number(crewneckGridDefaults.offset.y, { range: [-100, 100], label: "Offset Y" }),
+        },
+        scale: types.number(crewneckGridDefaults.scale, { range: [0, 200], label: "Grid Scale" }),
+      },
+    } : {}),
     ...(id === "box" ? { boxAnimationProgress: types.number(0, { range: [0, 1] }) } : {}),
   };
 
@@ -167,6 +179,13 @@ export function cloneTheatreObjectValue(value: TheatreObjectValue): TheatreObjec
     opacity: value.opacity,
     visible: value.visible,
     ...(typeof value.showLogo === "boolean" ? { showLogo: value.showLogo } : {}),
+    ...(value.grid ? {
+      grid: {
+        follow: value.grid.follow,
+        offset: { ...value.grid.offset },
+        scale: value.grid.scale,
+      },
+    } : {}),
     ...(typeof value.boxAnimationProgress === "number" ? { boxAnimationProgress: value.boxAnimationProgress } : {}),
   };
 }
@@ -176,6 +195,8 @@ function nearlyEqual(a: number, b: number) {
 }
 
 export function areTheatreObjectValuesEqual(a: TheatreObjectValue, b: TheatreObjectValue) {
+  const aGrid = a.grid ?? crewneckGridDefaults;
+  const bGrid = b.grid ?? crewneckGridDefaults;
   return (
     nearlyEqual(a.anchor.x, b.anchor.x) &&
     nearlyEqual(a.anchor.y, b.anchor.y) &&
@@ -189,6 +210,10 @@ export function areTheatreObjectValuesEqual(a: TheatreObjectValue, b: TheatreObj
     nearlyEqual(a.opacity, b.opacity) &&
     a.visible === b.visible &&
     (a.showLogo ?? false) === (b.showLogo ?? false) &&
+    nearlyEqual(aGrid.follow, bGrid.follow) &&
+    nearlyEqual(aGrid.offset.x, bGrid.offset.x) &&
+    nearlyEqual(aGrid.offset.y, bGrid.offset.y) &&
+    nearlyEqual(aGrid.scale, bGrid.scale) &&
     nearlyEqual(a.boxAnimationProgress ?? 0, b.boxAnimationProgress ?? 0)
   );
 }

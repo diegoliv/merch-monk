@@ -4,6 +4,15 @@ import { Environment, OrthographicCamera, TransformControls, useGLTF } from "@re
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
 import { resolveBreakpointMode } from "./breakpoints";
+import {
+  applyBackgroundGridViewport,
+  applyCrewneckGridViewport,
+  backgroundGridWorldToTheatre,
+  crewneckGridDefaults,
+  crewneckGridWorldToSettings,
+  getCrewneckGridFollowWeight,
+  usesBackgroundGridLayout,
+} from "./backgroundGridLayout";
 import { anchorToWorld, applyViewport, worldOffsetToPercent, worldScaleToPercent } from "./math";
 import {
   backgroundChildByParent,
@@ -22,7 +31,7 @@ import { useViewportInfo } from "./useViewportInfo";
 import type { ProductCupColorValue, ProductCupDecorationMethod } from "../components/StorySections";
 import { useExperienceRuntime } from "../experienceRuntime";
 import { configureSceneRenderer, studioEnvironmentPreset, tuneMaterial } from "./sceneAppearance";
-import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, BoxChildObjectId, Breakpoint, ObjectId } from "./types";
+import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, BoxChildObjectId, Breakpoint, ObjectId, Vec3, ViewportInfo } from "./types";
 
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
 const crewneckLogoPath = new URL("../textures/crewneck-logo.avif", new URL(modelPath, window.location.href)).href;
@@ -35,7 +44,7 @@ const entranceStagger = 0.05;
 type TheatreValues = Record<ObjectId, TheatreObjectValue>;
 type BoxChildValues = Record<BoxChildObjectId, TheatreObjectValue>;
 type BackgroundChildValues = Record<BackgroundChildObjectId, TheatreObjectValue>;
-type PointerState = { clientX: number; clientY: number; active: boolean; scrolling: boolean };
+type PointerState = { clientX: number; clientY: number; active: boolean };
 type PerformanceDebug = {
   frames: number;
   totalFrameMs: number;
@@ -114,6 +123,7 @@ type RestTransform = {
   position: THREE.Vector3;
   quaternion: THREE.Quaternion;
   scale: THREE.Vector3;
+  pivot?: THREE.Vector3;
 };
 
 function isBoxChildObjectId(id: ObjectId): id is BoxChildObjectId {
@@ -425,10 +435,13 @@ function applyBackgroundChildState(
   rest: RestTransform | undefined,
   childMaterials: THREE.Material[],
   parentOpacity: number,
-  float: number,
   tiltQuaternion: THREE.Quaternion,
   rotationEuler: THREE.Euler,
   rotationQuaternion: THREE.Quaternion,
+  parentWorldQuaternion: THREE.Quaternion,
+  localTiltQuaternion: THREE.Quaternion,
+  baseChildQuaternion: THREE.Quaternion,
+  pivotOffset: THREE.Vector3,
 ) {
   const childId = backgroundChildByParent[parentId];
   if (!childId || !rest) return;
@@ -439,13 +452,30 @@ function applyBackgroundChildState(
 
   target.position.set(
     rest.position.x + value.position.x,
-    rest.position.y + value.position.y + float,
+    rest.position.y + value.position.y,
     rest.position.z + value.position.z,
   );
   rotationEuler.set(value.rotation.x, value.rotation.y, value.rotation.z, "XYZ");
   rotationQuaternion.setFromEuler(rotationEuler);
-  target.quaternion.copy(rest.quaternion).multiply(rotationQuaternion).premultiply(tiltQuaternion);
+  baseChildQuaternion.copy(rest.quaternion).multiply(rotationQuaternion);
+  if (target.parent) {
+    target.parent.getWorldQuaternion(parentWorldQuaternion);
+  } else {
+    parentWorldQuaternion.identity();
+  }
+  localTiltQuaternion
+    .copy(parentWorldQuaternion)
+    .invert()
+    .multiply(tiltQuaternion)
+    .multiply(parentWorldQuaternion);
+  target.quaternion.copy(localTiltQuaternion).multiply(baseChildQuaternion);
   target.scale.set(rest.scale.x * value.scale, rest.scale.y * value.scale, rest.scale.z * value.scale);
+  if (rest.pivot) {
+    pivotOffset.copy(rest.pivot).multiply(target.scale).applyQuaternion(baseChildQuaternion);
+    target.position.add(pivotOffset);
+    pivotOffset.copy(rest.pivot).multiply(target.scale).applyQuaternion(target.quaternion);
+    target.position.sub(pivotOffset);
+  }
   const opacity = value.opacity * parentOpacity;
   target.visible = value.visible && opacity > 0.01;
   setOpacity(childMaterials, opacity);
@@ -458,6 +488,58 @@ function initialTheatreValues(breakpoint: Breakpoint): TheatreValues {
     values[id] = objects[id].value as TheatreObjectValue;
     return values;
   }, {} as TheatreValues);
+}
+
+function applyTheatreViewport(id: ObjectId, value: TheatreObjectValue, viewport: ViewportInfo) {
+  const state = valueToSceneState(value);
+  if (isBackgroundObjectId(id) && usesBackgroundGridLayout(state, viewport)) {
+    return applyBackgroundGridViewport(id, state, viewport);
+  }
+  return applyViewport(state, viewport);
+}
+
+function applyCrewneckGridLayout(
+  applied: AppliedSceneState,
+  values: TheatreValues,
+  viewport: ViewportInfo,
+) {
+  const crewneckValue = values.crewneck;
+  const backgroundValue = values.bg_crewneck;
+  const crewneckState = applyTheatreViewport("crewneck", crewneckValue, viewport);
+  const backgroundState = applyTheatreViewport("bg_crewneck", backgroundValue, viewport);
+
+  applied.bg_crewneck = backgroundState;
+  applied.crewneck = applyCrewneckGridViewport(
+    crewneckState,
+    backgroundState,
+    valueToSceneState(backgroundValue),
+    crewneckValue.grid ?? crewneckGridDefaults,
+    viewport,
+  );
+  return applied;
+}
+
+function applyTheatreValues(values: TheatreValues, viewport: ViewportInfo) {
+  const applied = objectIds.reduce((result, id) => {
+    result[id] = applyTheatreViewport(id, values[id], viewport);
+    return result;
+  }, {} as AppliedSceneState);
+
+  return applyCrewneckGridLayout(applied, values, viewport);
+}
+
+function updateAppliedTheatreValue(
+  applied: AppliedSceneState,
+  values: TheatreValues,
+  id: ObjectId,
+  viewport: ViewportInfo,
+) {
+  if (id === "crewneck" || id === "bg_crewneck") {
+    applyCrewneckGridLayout(applied, values, viewport);
+    return;
+  }
+
+  applied[id] = applyTheatreViewport(id, values[id], viewport);
 }
 
 type MerchObjectProps = {
@@ -500,11 +582,15 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
   const centerRef = useRef(new THREE.Vector3());
   const childRotationEulerRef = useRef(new THREE.Euler());
   const childRotationQuaternionRef = useRef(new THREE.Quaternion());
+  const childParentWorldQuaternionRef = useRef(new THREE.Quaternion());
+  const childLocalTiltQuaternionRef = useRef(new THREE.Quaternion());
+  const childBaseQuaternionRef = useRef(new THREE.Quaternion());
+  const childPivotOffsetRef = useRef(new THREE.Vector3());
   const lastOpacityRef = useRef(Number.NaN);
   const lastAnimationProgressRef = useRef(Number.NaN);
   const crewneckLogoMaterialsRef = useRef<CrewneckLogoMaterialState[]>([]);
   const lastShowLogoRef = useRef<boolean | null>(null);
-  const phase = useMemo(() => objectIds.indexOf(id) * 0.45, [id]);
+
   const object = useMemo(() => {
     const node = scene.getObjectByName(modelNodeNames[id] ?? id);
     return node ? cloneNode(node, id === "box", isBackgroundObjectId(id) ? backgroundChildByParent[id] ?? null : undefined) : null;
@@ -531,10 +617,15 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     if (!backgroundChildId || !object) return undefined;
     const child = object.getObjectByName(backgroundChildId);
     if (!child) return undefined;
+    const bounds = new THREE.Box3().setFromObject(child);
+    const pivot = bounds.isEmpty()
+      ? new THREE.Vector3()
+      : child.worldToLocal(bounds.getCenter(new THREE.Vector3()));
     const rest = {
       position: child.position.clone(),
       quaternion: child.quaternion.clone(),
       scale: child.scale.clone(),
+      pivot,
     };
     child.userData.restTransform = rest;
     return rest;
@@ -648,14 +739,14 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     };
   }, [id, object, productCupArtworkUrl, productCupColor, productCupDecorationMethod]);
 
-  function applyState(float = 0, tilt = tiltRef.current, entranceScale = 1) {
+  function applyState(tilt = tiltRef.current, entranceScale = 1) {
     if (!groupRef.current) return;
     const state = appliedRef.current[id];
     if (!state) return;
     const isBackground = isBackgroundObjectId(id);
     groupRef.current.position.set(
       state.worldPosition[0],
-      state.worldPosition[1] + (isBackground ? 0 : float),
+      state.worldPosition[1],
       state.worldPosition[2],
     );
     baseEulerRef.current.set(state.rotation[0], state.rotation[1], state.rotation[2], "XYZ");
@@ -690,10 +781,13 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
           backgroundChildRestTransform,
           backgroundChildMaterials,
           state.opacity,
-          float,
           globalTiltQuaternionRef.current,
           childRotationEulerRef.current,
           childRotationQuaternionRef.current,
+          childParentWorldQuaternionRef.current,
+          childLocalTiltQuaternionRef.current,
+          childBaseQuaternionRef.current,
+          childPivotOffsetRef.current,
         );
 
       }
@@ -779,11 +873,10 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
 
     if (lockMotion) {
       tiltRef.current.lerp(targetTiltRef.current.set(0, 0), 0.18);
-      applyState(0, tiltRef.current, entranceScale);
+      applyState(tiltRef.current, entranceScale);
       return;
     }
 
-    const float = Math.sin(clock.elapsedTime * 0.55 + phase) * 0.045;
     const motionObject = backgroundChildId
       ? object?.getObjectByName(backgroundChildId) ?? null
       : isBackgroundObjectId(id)
@@ -799,8 +892,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
       state.opacity <= 0.08 ||
       !motionValue?.visible ||
       motionValue.opacity <= 0.08 ||
-      !pointerState.active ||
-      pointerState.scrolling
+      !pointerState.active
     ) {
       targetTiltRef.current.set(0, 0);
     } else {
@@ -828,7 +920,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     }
 
     tiltRef.current.lerp(targetTiltRef.current, hoverFollow);
-    applyState(float, tiltRef.current, entranceScale);
+    applyState(tiltRef.current, entranceScale);
   });
 
   if (!object) return null;
@@ -935,35 +1027,30 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
   useSceneProgress(activeBreakpoint);
   const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
   const theatreValuesRef = useRef<TheatreValues>(initialTheatreValues(activeBreakpoint));
-  const appliedRef = useRef<AppliedSceneState>(objectIds.reduce((result, id) => {
-    result[id] = applyViewport(valueToSceneState(theatreValuesRef.current[id]), activeViewport);
-    return result;
-  }, {} as AppliedSceneState));
-  const pointerStateRef = useRef<PointerState>({ clientX: 0, clientY: 0, active: false, scrolling: false });
+  const appliedRef = useRef<AppliedSceneState>(
+    applyTheatreValues(theatreValuesRef.current, activeViewport),
+  );
+  const pointerStateRef = useRef<PointerState>({ clientX: 0, clientY: 0, active: false });
   const entranceStartRef = useRef<number | null>(null);
   const entranceEnabled = runtime.mode === "webflow" && !editor.enabled;
 
   useEffect(() => {
     const objects = getTheatreObjects(activeBreakpoint);
     theatreValuesRef.current = initialTheatreValues(activeBreakpoint);
-    objectIds.forEach((id) => {
-      appliedRef.current[id] = applyViewport(valueToSceneState(theatreValuesRef.current[id]), activeViewportRef.current);
-    });
+    appliedRef.current = applyTheatreValues(theatreValuesRef.current, activeViewportRef.current);
 
     const unsubscribers = objectIds.map((id) => objects[id].onValuesChange((value) => {
       const debug = getPerformanceDebug();
       if (debug) debug.theatreUpdates += 1;
       theatreValuesRef.current[id] = value as TheatreObjectValue;
-      appliedRef.current[id] = applyViewport(valueToSceneState(value as TheatreObjectValue), activeViewportRef.current);
+      updateAppliedTheatreValue(appliedRef.current, theatreValuesRef.current, id, activeViewportRef.current);
     }));
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, [activeBreakpoint]);
 
   useEffect(() => {
-    objectIds.forEach((id) => {
-      appliedRef.current[id] = applyViewport(valueToSceneState(theatreValuesRef.current[id]), activeViewport);
-    });
+    appliedRef.current = applyTheatreValues(theatreValuesRef.current, activeViewport);
   }, [activeViewport]);
 
   useEffect(() => {
@@ -983,29 +1070,12 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
     };
   }, []);
 
-  useEffect(() => {
-    const previewScroller = document.querySelector<HTMLElement>(runtime.previewScrollerSelector);
-    const scrollTarget: Window | HTMLElement = previewScroller ?? window;
-    let scrollEndTimer = 0;
-    function handleScroll() {
-      pointerStateRef.current.scrolling = true;
-      window.clearTimeout(scrollEndTimer);
-      scrollEndTimer = window.setTimeout(() => {
-        pointerStateRef.current.scrolling = false;
-      }, 120);
-    }
-    scrollTarget.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      scrollTarget.removeEventListener("scroll", handleScroll);
-      window.clearTimeout(scrollEndTimer);
-    };
-  }, [editor.breakpointMode, editor.enabled, runtime.previewScrollerSelector]);
 
   function saveTransform() {
     if (!selectedObject) return;
 
     const object = getTheatreObject(editor.selectedObject, activeBreakpoint);
-    const current = object.value;
+    const current = object.value as TheatreObjectValue;
 
     if (isBoxChildObjectId(editor.selectedObject) || isBackgroundChildObjectId(editor.selectedObject)) {
       const rest = selectedObject.userData.restTransform as RestTransform | undefined;
@@ -1031,6 +1101,66 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
       };
 
       void setTheatreObjectValue(editor.selectedObject, next, activeBreakpoint);
+      return;
+    }
+
+    const currentState = valueToSceneState(current as TheatreObjectValue);
+    if (editor.selectedObject === "crewneck") {
+      const backgroundValue = theatreValuesRef.current.bg_crewneck;
+      const backgroundTheatreState = valueToSceneState(backgroundValue);
+      const grid = current.grid ?? crewneckGridDefaults;
+      const follow = getCrewneckGridFollowWeight(backgroundTheatreState, grid, activeViewport);
+
+      if (follow > 0.001) {
+        const normalState = applyViewport(currentState, activeViewport);
+        const backgroundState = applyTheatreViewport("bg_crewneck", backgroundValue, activeViewport);
+        const inverseFollow = 1 / follow;
+        const targetPosition: Vec3 = [
+          (selectedObject.position.x - normalState.worldPosition[0] * (1 - follow)) * inverseFollow,
+          (selectedObject.position.y - normalState.worldPosition[1] * (1 - follow)) * inverseFollow,
+          selectedObject.position.z,
+        ];
+        const targetScale = (
+          selectedObject.scale.x - normalState.scale * (1 - follow)
+        ) * inverseFollow;
+        const nextGrid = crewneckGridWorldToSettings(
+          targetPosition,
+          targetScale,
+          backgroundState,
+          grid,
+        );
+
+        void setTheatreObjectValue(editor.selectedObject, {
+          position: {
+            x: current.position.x,
+            y: current.position.y,
+            z: selectedObject.position.z,
+          },
+          rotation: {
+            x: selectedObject.rotation.x,
+            y: selectedObject.rotation.y,
+            z: selectedObject.rotation.z,
+          },
+          grid: nextGrid,
+          visible: true,
+          opacity: Math.max(current.opacity, 1),
+        }, activeBreakpoint);
+        return;
+      }
+    }
+
+    if (isBackgroundObjectId(editor.selectedObject) && usesBackgroundGridLayout(currentState, activeViewport)) {
+      const next = backgroundGridWorldToTheatre(
+        editor.selectedObject,
+        selectedObject.position.toArray() as Vec3,
+        selectedObject.scale.x,
+        activeViewport,
+      );
+      void setTheatreObjectValue(editor.selectedObject, {
+        ...next,
+        visible: true,
+        opacity: Math.max(current.opacity, 1),
+      }, activeBreakpoint);
       return;
     }
 
