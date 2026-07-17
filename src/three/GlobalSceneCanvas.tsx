@@ -35,6 +35,7 @@ import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, Bo
 
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
 const crewneckLogoPath = new URL("../textures/crewneck-logo.avif", new URL(modelPath, window.location.href)).href;
+const boxTexturePath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5a88f85ff267f9a82727a8_box_body.avif";
 const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones", product_cup: "cup" };
 const boxAnimationNames = new Set(["box_open"]);
 const entranceObjectIds: ObjectId[] = renderObjectIds.filter((id) => id !== "box" && id !== "product_cup");
@@ -264,6 +265,33 @@ function collectMaterials(object: THREE.Object3D) {
     });
   });
   return materials;
+}
+
+type BoxTextureMaterialState = {
+  material: THREE.MeshStandardMaterial;
+  map: THREE.Texture | null;
+  color: THREE.Color;
+};
+
+function applyBoxTexture(object: THREE.Object3D, texture: THREE.Texture) {
+  const box = object.getObjectByName("box");
+  if (!box || !("material" in box)) return [];
+
+  const mesh = box as THREE.Mesh;
+  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  return materials.flatMap((material): BoxTextureMaterialState[] => {
+    if (!(material instanceof THREE.MeshStandardMaterial)) return [];
+
+    const state = {
+      material,
+      map: material.map,
+      color: material.color.clone(),
+    };
+    material.map = texture;
+    material.color.set("#ffffff");
+    material.needsUpdate = true;
+    return [state];
+  });
 }
 
 function setOpacity(materials: THREE.Material[], opacity: number) {
@@ -693,6 +721,45 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
       lastShowLogoRef.current = null;
     };
   }, [id, materials, object, theatreValuesRef]);
+  useEffect(() => {
+    if (id !== "box" || !object) return;
+
+    let cancelled = false;
+    let texture: THREE.Texture | null = null;
+    let materialStates: BoxTextureMaterialState[] = [];
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+    loader.load(
+      boxTexturePath,
+      (loadedTexture) => {
+        if (cancelled) {
+          loadedTexture.dispose();
+          return;
+        }
+        loadedTexture.colorSpace = THREE.SRGBColorSpace;
+        loadedTexture.flipY = false;
+        loadedTexture.anisotropy = gl.capabilities.getMaxAnisotropy();
+        loadedTexture.needsUpdate = true;
+        texture = loadedTexture;
+        materialStates = applyBoxTexture(object, loadedTexture);
+      },
+      undefined,
+      () => {
+        if (!cancelled) console.warn("[Merch Monk] Could not load box texture: " + boxTexturePath);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+      materialStates.forEach(({ material, map, color }) => {
+        if (material.map !== texture) return;
+        material.map = map;
+        material.color.copy(color);
+        material.needsUpdate = true;
+      });
+      texture?.dispose();
+    };
+  }, [gl, id, object]);
   useEffect(() => {
     if (id !== "product_cup" || !object) return;
 
