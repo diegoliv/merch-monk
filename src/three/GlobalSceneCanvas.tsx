@@ -42,6 +42,7 @@ const boxAnimationNames = new Set(["box_open"]);
 const entranceObjectIds: ObjectId[] = renderObjectIds.filter((id) => id !== "box" && id !== "product_cup");
 const entranceDuration = 0.55;
 const entranceStagger = 0.05;
+const backgroundChildDepthGap = 0.24;
 
 type TheatreValues = Record<ObjectId, TheatreObjectValue>;
 type BoxChildValues = Record<BoxChildObjectId, TheatreObjectValue>;
@@ -189,7 +190,7 @@ function cloneNode(
     const backgroundBounds = new THREE.Box3().setFromObject(cloned);
     if (child) {
       const childBounds = new THREE.Box3().setFromObject(child);
-      child.position.z += backgroundBounds.max.z - childBounds.min.z + 0.02;
+      child.position.z += backgroundBounds.max.z - childBounds.min.z + backgroundChildDepthGap;
       child.updateMatrixWorld(true);
     }
 
@@ -493,6 +494,14 @@ function applyBackgroundChildState(
   baseChildQuaternion.copy(rest.quaternion).multiply(rotationQuaternion);
   if (target.parent) {
     target.parent.getWorldQuaternion(parentWorldQuaternion);
+    if (
+      !Number.isFinite(parentWorldQuaternion.x) ||
+      !Number.isFinite(parentWorldQuaternion.y) ||
+      !Number.isFinite(parentWorldQuaternion.z) ||
+      !Number.isFinite(parentWorldQuaternion.w)
+    ) {
+      parentWorldQuaternion.identity();
+    }
   } else {
     parentWorldQuaternion.identity();
   }
@@ -667,16 +676,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
   const backgroundChildMaterials = useMemo(() => {
     if (!backgroundChildId || !object) return [];
     const child = object.getObjectByName(backgroundChildId);
-    if (!child) return [];
-    child.traverse((descendant) => {
-      descendant.renderOrder = 10;
-    });
-    return collectMaterials(child).map((material) => {
-      material.depthTest = false;
-      material.depthWrite = false;
-      material.needsUpdate = true;
-      return material;
-    });
+    return child ? collectMaterials(child) : [];
   }, [backgroundChildId, object]);
   const boxChildMaterials = useMemo(() => {
     if (id !== "box" || !object) return {};
