@@ -35,7 +35,6 @@ import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, Bo
 
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
 const crewneckLogoPath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5527787af01c167ce42d3c_f488968c6e31020e99fcf5deeeb44ad6_crewneck-logo.avif";
-const productCupTexturePath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a50e9004a86969bdfa1d014_cup-body-logo.avif";
 const boxTexturePath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5a88f85ff267f9a82727a8_box_body.avif";
 const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones", product_cup: "cup" };
 const boxAnimationNames = new Set(["box_open"]);
@@ -771,9 +770,10 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     let cancelled = false;
     let colorTexture: THREE.CanvasTexture | null = null;
     let bumpTexture: THREE.CanvasTexture | null = null;
-    const artworkUrl = productCupArtworkUrl ?? productCupTexturePath;
     applyProductCupMaterial(object, productCupColor, productCupDecorationMethod);
+    if (!productCupArtworkUrl) return;
 
+    const artworkUrl = productCupArtworkUrl;
     const image = new Image();
     image.crossOrigin = "anonymous";
     image.decoding = "async";

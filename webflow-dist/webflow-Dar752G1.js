@@ -44559,7 +44559,7 @@ function rR(i = 0) {
   t(), XE !== e && (fg == null || fg.disconnect(), XE = e, fg = new MutationObserver(t), fg.observe(e, { childList: !0, subtree: !0 }));
 }
 async function fm() {
-  Rg || (Rg = import("./index-B3PEfSqp.js").then((e) => e.i).then((e) => e.default));
+  Rg || (Rg = import("./index-B0AC8VHl.js").then((e) => e.i).then((e) => e.default));
   const i = await Rg;
   return WE || (i.initialize({ persistenceKey: "merch-monk-theatre-studio-neutral" }), WE = !0), rR(), i;
 }
@@ -44753,11 +44753,11 @@ function t5(i, e) {
   i.toneMapping = n_, i.toneMappingExposure = $z, e.environmentIntensity = e5;
 }
 var mb;
-const lR = ((mb = window.MerchMonkWebflow) == null ? void 0 : mb.modelUrl) ?? "/models/merch_monk_website.glb", qE = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5527787af01c167ce42d3c_f488968c6e31020e99fcf5deeeb44ad6_crewneck-logo.avif", n5 = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a50e9004a86969bdfa1d014_cup-body-logo.avif", ZE = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5a88f85ff267f9a82727a8_box_body.avif", r5 = { box: "box_bones", product_cup: "cup" }, i5 = /* @__PURE__ */ new Set(["box_open"]), $E = id.filter((i) => i !== "box" && i !== "product_cup"), s5 = 0.55, o5 = 0.05, a5 = 0.24, cR = new URLSearchParams(window.location.search).has("perf");
+const lR = ((mb = window.MerchMonkWebflow) == null ? void 0 : mb.modelUrl) ?? "/models/merch_monk_website.glb", qE = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5527787af01c167ce42d3c_f488968c6e31020e99fcf5deeeb44ad6_crewneck-logo.avif", ZE = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5a88f85ff267f9a82727a8_box_body.avif", n5 = { box: "box_bones", product_cup: "cup" }, r5 = /* @__PURE__ */ new Set(["box_open"]), $E = id.filter((i) => i !== "box" && i !== "product_cup"), i5 = 0.55, s5 = 0.05, o5 = 0.24, cR = new URLSearchParams(window.location.search).has("perf");
 function _S() {
   return window.__MERCH_MONK_PERF__;
 }
-function l5() {
+function a5() {
   return Ae.useEffect(() => {
     if (!cR) return;
     const i = {
@@ -44806,7 +44806,7 @@ function Xp(i) {
 function ly(i) {
   return u0.includes(i);
 }
-function c5(i, e = !1, t) {
+function l5(i, e = !1, t) {
   const n = ez(i);
   n.traverse((g) => {
     if ("material" in g) {
@@ -44826,7 +44826,7 @@ function c5(i, e = !1, t) {
     const y = new yi().setFromObject(n);
     if (v) {
       const C = new yi().setFromObject(v);
-      v.position.z += y.max.z - C.min.z + a5, v.updateMatrixWorld(!0);
+      v.position.z += y.max.z - C.min.z + o5, v.updateMatrixWorld(!0);
     }
     const x = y.getCenter(new $()), w = new al();
     return w.name = `${i.name}_centered`, g.position.sub(x), w.add(g), w.updateMatrixWorld(!0), w;
@@ -44835,7 +44835,7 @@ function c5(i, e = !1, t) {
   const d = new yi().setFromObject(n).getCenter(new $()), p = new al();
   return p.name = `${i.name}_centered`, n.position.sub(d), p.add(n), p.updateMatrixWorld(!0), p;
 }
-function u5(i, e) {
+function c5(i, e) {
   const n = [
     { suffix: ".position", property: "position" },
     { suffix: ".quaternion", property: "quaternion" },
@@ -44845,15 +44845,15 @@ function u5(i, e) {
   const r = e.name.slice(0, -n.suffix.length), s = i.getObjectByName(r);
   return (s == null ? void 0 : s[n.property].toArray()) ?? null;
 }
-function f5(i, e) {
+function u5(i, e) {
   if (e.times[0] <= 0) return e.clone();
-  const t = u5(i, e);
+  const t = c5(i, e);
   if (!t) return e.clone();
   const n = e.getValueSize(), r = Math.max(0, e.times[0] - 1e-4), s = r > 0 ? 2 : 1, a = new Float32Array(e.times.length + s), c = new Float32Array(e.values.length + n * s);
   return a[0] = 0, s === 2 && (a[1] = r), a.set(e.times, s), c.set(t, 0), s === 2 && c.set(t, n), c.set(e.values, n * s), e instanceof Gu ? new Gu(e.name, a, c) : new rd(e.name, a, c);
 }
-function d5(i, e) {
-  const t = e.filter((n) => i5.has(n.name)).flatMap((n) => n.tracks.map((r) => f5(i, r)));
+function f5(i, e) {
+  const t = e.filter((n) => r5.has(n.name)).flatMap((n) => n.tracks.map((r) => u5(i, r)));
   return t.length > 0 ? new Ih("box_combined", -1, t) : null;
 }
 function z1(i) {
@@ -44866,7 +44866,7 @@ function z1(i) {
     });
   }), e;
 }
-function h5(i, e) {
+function d5(i, e) {
   const t = i.getObjectByName("box");
   if (!t || !("material" in t)) return [];
   const n = t;
@@ -44885,7 +44885,7 @@ function IA(i, e) {
     t.transparent = e < 0.999, t.opacity = e, t.depthWrite = e > 0.5;
   });
 }
-function p5(i) {
+function h5(i) {
   const e = new wr(i);
   return e.colorSpace = gs, e.flipY = !1, e.needsUpdate = !0, e;
 }
@@ -44894,7 +44894,7 @@ function H1(i, e) {
     e ? t.emissive.set("#ffffff") : t.emissive.copy(n), t.emissiveMap = e ? a : r, t.emissiveIntensity = e ? 1 : s, t.needsUpdate = !0;
   });
 }
-function m5(i) {
+function p5(i) {
   return i.includes("orange") && !i.includes("dark") || i.includes("cup.uv");
 }
 function eb(i, e, t, n = null, r = null) {
@@ -44904,7 +44904,7 @@ function eb(i, e, t, n = null, r = null) {
     (Array.isArray(a.material) ? a.material : [a.material]).forEach((d) => {
       if (!d || !("color" in d)) return;
       const p = d, g = d.name.toLowerCase().replace(/[_\s]/g, ".");
-      g.includes("orange.dark") ? (p.color.set(e.darkColor), p.map = null, p.bumpMap = null, p.bumpScale = 0) : m5(g) && (p.color.set(n ? "#ffffff" : e.color), p.map = n, p.bumpMap = r, p.bumpScale = r ? -0.018 : 0), p.roughness = t === "engraved" ? 0.78 : t === "print" ? 0.72 : 0.62, p.metalness = Math.min(p.metalness ?? 0, 0.08), d.needsUpdate = !0;
+      g.includes("orange.dark") ? (p.color.set(e.darkColor), p.map = null, p.bumpMap = null, p.bumpScale = 0) : p5(g) && (p.color.set(n ? "#ffffff" : e.color), p.map = n, p.bumpMap = r, p.bumpScale = r ? -0.018 : 0), p.roughness = t === "engraved" ? 0.78 : t === "print" ? 0.72 : 0.62, p.metalness = Math.min(p.metalness ?? 0, 0.08), d.needsUpdate = !0;
     });
   });
 }
@@ -44914,7 +44914,7 @@ function tb(i, e) {
   const n = t.getContext("2d");
   return n ? (n.drawImage(i, 0, 0), n.globalCompositeOperation = "source-in", n.fillStyle = e, n.fillRect(0, 0, t.width, t.height), n.globalCompositeOperation = "source-over", t) : null;
 }
-function g5(i, e, t) {
+function m5(i, e, t) {
   const n = document.createElement("canvas");
   n.width = i.naturalWidth, n.height = i.naturalHeight;
   const r = n.getContext("2d"), s = tb(
@@ -44934,7 +44934,7 @@ function g5(i, e, t) {
   }
   return { colorTexture: a, bumpTexture: c };
 }
-function v5(i, e, t, n, r, s, a) {
+function g5(i, e, t, n, r, s, a) {
   Wu.forEach((c) => {
     const d = i.getObjectByName(c), p = t[c], g = e[c];
     if (!d || !p || !g) return;
@@ -44947,7 +44947,7 @@ function v5(i, e, t, n, r, s, a) {
     d.visible = g.visible && v > 0.01, IA(n[c] ?? [], v);
   });
 }
-function y5(i, e, t, n, r, s, a, c, d, p, g, v, y) {
+function v5(i, e, t, n, r, s, a, c, d, p, g, v, y) {
   const x = Bh[e];
   if (!x || !n) return;
   const w = i.getObjectByName(x), C = t[x];
@@ -44982,18 +44982,18 @@ function G1(i, e) {
   const t = f0.reduce((n, r) => (n[r] = jg(r, i[r], e), n), {});
   return uR(t, i, e);
 }
-function _5(i, e, t, n) {
+function y5(i, e, t, n) {
   if (t === "crewneck" || t === "bg_crewneck") {
     uR(i, e, n);
     return;
   }
   i[t] = jg(t, e[t], n);
 }
-function x5({ id: i, appliedRef: e, theatreValuesRef: t, pointerStateRef: n, lockMotion: r, selectedObjectId: s, editorEnabled: a, hoverTiltX: c, hoverTiltY: d, hoverFollow: p, hoverRange: g, productCupColor: v, productCupArtworkUrl: y, productCupDecorationMethod: x, setSelectedRef: w, activeBreakpoint: C, entranceEnabled: E, entranceIndex: M, entranceStartRef: D }) {
+function _5({ id: i, appliedRef: e, theatreValuesRef: t, pointerStateRef: n, lockMotion: r, selectedObjectId: s, editorEnabled: a, hoverTiltX: c, hoverTiltY: d, hoverFollow: p, hoverRange: g, productCupColor: v, productCupArtworkUrl: y, productCupDecorationMethod: x, setSelectedRef: w, activeBreakpoint: C, entranceEnabled: E, entranceIndex: M, entranceStartRef: D }) {
   const { scene: B, animations: P } = c0(lR), { camera: j, gl: H } = vs(), U = Ae.useRef(null), G = Ae.useRef(new ct()), N = Ae.useRef(new s0()), k = Ae.useRef(new ct()), Q = Ae.useRef(new ct()), fe = Ae.useRef(new _s()), de = Ae.useRef(new er()), ve = Ae.useRef(new _s()), Te = Ae.useRef(new er()), ue = Ae.useRef(null), De = Ae.useRef(null), ne = Ae.useRef(new yi()), _e = Ae.useRef(new $()), le = Ae.useRef(new _s()), Y = Ae.useRef(new er()), he = Ae.useRef(new er()), Xe = Ae.useRef(new er()), ee = Ae.useRef(new er()), Pe = Ae.useRef(new $()), Ge = Ae.useRef(Number.NaN), He = Ae.useRef(Number.NaN), ft = Ae.useRef([]), Ct = Ae.useRef(null), rt = Ae.useMemo(() => {
-    const ut = B.getObjectByName(r5[i] ?? i);
-    return ut ? c5(ut, i === "box", Xp(i) ? Bh[i] ?? null : void 0) : null;
-  }, [i, B]), $t = Ae.useMemo(() => i === "box" && rt ? d5(rt, P) : null, [P, i, rt]), ot = Ae.useMemo(() => i !== "box" || !rt ? {} : Wu.reduce((ut, Ue) => {
+    const ut = B.getObjectByName(n5[i] ?? i);
+    return ut ? l5(ut, i === "box", Xp(i) ? Bh[i] ?? null : void 0) : null;
+  }, [i, B]), $t = Ae.useMemo(() => i === "box" && rt ? f5(rt, P) : null, [P, i, rt]), ot = Ae.useMemo(() => i !== "box" || !rt ? {} : Wu.reduce((ut, Ue) => {
     const q = rt.getObjectByName(Ue);
     return q && (ut[Ue] = {
       position: q.position.clone(),
@@ -45025,7 +45025,7 @@ function x5({ id: i, appliedRef: e, theatreValuesRef: t, pointerStateRef: n, loc
     const Ue = new Image();
     return Ue.crossOrigin = "anonymous", Ue.decoding = "async", Ue.onload = () => {
       if (ut) return;
-      const q = p5(Ue), K = Jt.flatMap((Oe) => Oe instanceof Dh ? [{
+      const q = h5(Ue), K = Jt.flatMap((Oe) => Oe instanceof Dh ? [{
         material: Oe,
         baseEmissive: Oe.emissive.clone(),
         baseEmissiveMap: Oe.emissiveMap,
@@ -45052,7 +45052,7 @@ function x5({ id: i, appliedRef: e, theatreValuesRef: t, pointerStateRef: n, loc
           we.dispose();
           return;
         }
-        we.colorSpace = gs, we.flipY = !1, we.anisotropy = H.capabilities.getMaxAnisotropy(), we.needsUpdate = !0, Ue = we, q = h5(rt, we);
+        we.colorSpace = gs, we.flipY = !1, we.anisotropy = H.capabilities.getMaxAnisotropy(), we.needsUpdate = !0, Ue = we, q = d5(rt, we);
       },
       void 0,
       () => {
@@ -45066,12 +45066,11 @@ function x5({ id: i, appliedRef: e, theatreValuesRef: t, pointerStateRef: n, loc
   }, [H, i, rt]), Ae.useEffect(() => {
     if (i !== "product_cup" || !rt) return;
     let ut = !1, Ue = null, q = null;
-    const K = y ?? n5;
-    eb(rt, v, x);
-    const we = new Image();
+    if (eb(rt, v, x), !y) return;
+    const K = y, we = new Image();
     return we.crossOrigin = "anonymous", we.decoding = "async", we.onload = () => {
       if (ut) return;
-      const Oe = g5(we, v, x);
+      const Oe = m5(we, v, x);
       Oe && (Ue = Oe.colorTexture, q = Oe.bumpTexture, eb(rt, v, x, Ue, q));
     }, we.onerror = () => {
       ut || console.warn(`[Merch Monk] Could not load product cup artwork: ${K}`);
@@ -45095,7 +45094,7 @@ function x5({ id: i, appliedRef: e, theatreValuesRef: t, pointerStateRef: n, loc
       q.worldPosition[0],
       q.worldPosition[1],
       q.worldPosition[2]
-    ), fe.current.set(q.rotation[0], q.rotation[1], q.rotation[2], "XYZ"), de.current.setFromEuler(fe.current), ve.current.set(ut.x, ut.y, 0, "XYZ"), Te.current.setFromEuler(ve.current), U.current.quaternion.copy(de.current), K || U.current.quaternion.premultiply(Te.current), U.current.scale.setScalar(q.scale * Ue), U.current.visible = q.visible && q.opacity > 0.01, rt && ((!Number.isFinite(Ge.current) || Math.abs(Ge.current - q.opacity) > 1e-4) && (IA(Jt, q.opacity), Ge.current = q.opacity), i === "box" && v5(
+    ), fe.current.set(q.rotation[0], q.rotation[1], q.rotation[2], "XYZ"), de.current.setFromEuler(fe.current), ve.current.set(ut.x, ut.y, 0, "XYZ"), Te.current.setFromEuler(ve.current), U.current.quaternion.copy(de.current), K || U.current.quaternion.premultiply(Te.current), U.current.scale.setScalar(q.scale * Ue), U.current.visible = q.visible && q.opacity > 0.01, rt && ((!Number.isFinite(Ge.current) || Math.abs(Ge.current - q.opacity) > 1e-4) && (IA(Jt, q.opacity), Ge.current = q.opacity), i === "box" && g5(
       rt,
       t.current,
       ot,
@@ -45103,7 +45102,7 @@ function x5({ id: i, appliedRef: e, theatreValuesRef: t, pointerStateRef: n, loc
       q.opacity,
       le.current,
       Y.current
-    ), K && y5(
+    ), K && v5(
       rt,
       i,
       t.current,
@@ -45144,7 +45143,7 @@ function x5({ id: i, appliedRef: e, theatreValuesRef: t, pointerStateRef: n, loc
   }, [$t, rt]), a0(({ clock: ut }) => {
     const Ue = e.current[i];
     if (!Ue) return;
-    const q = n.current, K = D.current, we = K === null ? 0 : ut.elapsedTime - K - M * o5, Oe = E ? Mg.clamp(we / s5, 0, 1) : 1, it = 1 - Math.pow(1 - Oe, 3), Ze = H.domElement.getBoundingClientRect();
+    const q = n.current, K = D.current, we = K === null ? 0 : ut.elapsedTime - K - M * s5, Oe = E ? Mg.clamp(we / i5, 0, 1) : 1, it = 1 - Math.pow(1 - Oe, 3), Ze = H.domElement.getBoundingClientRect();
     if (G.current.set(
       (q.clientX - Ze.left) / Math.max(Ze.width, 1) * 2 - 1,
       -((q.clientY - Ze.top) / Math.max(Ze.height, 1)) * 2 + 1
@@ -45202,7 +45201,7 @@ function x5({ id: i, appliedRef: e, theatreValuesRef: t, pointerStateRef: n, loc
     }
   ) : null;
 }
-function S5({ entranceStartRef: i, onReady: e }) {
+function x5({ entranceStartRef: i, onReady: e }) {
   const t = Ae.useRef(!1), n = Ae.useRef(0), r = Ae.useRef(!1), s = Ae.useRef(e);
   return s.current = e, Ae.useEffect(() => {
     let a = !1;
@@ -45222,7 +45221,7 @@ function S5({ entranceStartRef: i, onReady: e }) {
     }
   }), null;
 }
-function A5({ productCupColor: i, productCupArtworkUrl: e = null, productCupDecorationMethod: t = "digital", onReady: n }) {
+function S5({ productCupColor: i, productCupArtworkUrl: e = null, productCupDecorationMethod: t = "digital", onReady: n }) {
   const r = _S();
   r && (r.sceneRenders += 1);
   const s = $y(), a = aR(), c = d0(), d = c.enabled ? c.breakpointMode : "auto", p = SS(d, a.breakpoint), g = Ae.useMemo(
@@ -45238,7 +45237,7 @@ function A5({ productCupColor: i, productCupArtworkUrl: e = null, productCupDeco
     w.current = nb(p), C.current = G1(w.current, v.current);
     const j = f0.map((H) => P[H].onValuesChange((U) => {
       const G = _S();
-      G && (G.theatreUpdates += 1), w.current[H] = U, _5(C.current, w.current, H, v.current);
+      G && (G.theatreUpdates += 1), w.current[H] = U, y5(C.current, w.current, H, v.current);
     }));
     return () => j.forEach((H) => H());
   }, [p]), Ae.useEffect(() => {
@@ -45346,7 +45345,7 @@ function A5({ productCupColor: i, productCupArtworkUrl: e = null, productCupDeco
     gg(c.selectedObject, N, p);
   }
   return /* @__PURE__ */ lt.jsxs(lt.Fragment, { children: [
-    /* @__PURE__ */ lt.jsx(S5, { entranceStartRef: M, onReady: n }),
+    /* @__PURE__ */ lt.jsx(x5, { entranceStartRef: M, onReady: n }),
     /* @__PURE__ */ lt.jsx(
       DU,
       {
@@ -45359,7 +45358,7 @@ function A5({ productCupColor: i, productCupArtworkUrl: e = null, productCupDeco
     ),
     /* @__PURE__ */ lt.jsx($U, { preset: Zz, background: !1 }),
     id.map((P) => /* @__PURE__ */ lt.jsx(
-      x5,
+      _5,
       {
         id: P,
         appliedRef: C,
@@ -45386,7 +45385,7 @@ function A5({ productCupColor: i, productCupArtworkUrl: e = null, productCupDeco
     c.enabled && y && (id.includes(c.selectedObject) || Pg(c.selectedObject) || ly(c.selectedObject)) ? /* @__PURE__ */ lt.jsx(LU, { object: y, mode: c.mode, size: 0.8, onObjectChange: B }) : null
   ] });
 }
-function w5({ productCupColor: i, productCupArtworkUrl: e = null, productCupDecorationMethod: t = "digital", onReady: n }) {
+function A5({ productCupColor: i, productCupArtworkUrl: e = null, productCupDecorationMethod: t = "digital", onReady: n }) {
   const r = d0(), s = $y();
   return /* @__PURE__ */ lt.jsx("div", { className: `scene-layer ${s.mode === "webflow" ? "is-webflow" : ""} ${r.enabled ? "is-editing" : ""}`, "aria-hidden": "true", children: /* @__PURE__ */ lt.jsxs(
     Ek,
@@ -45397,9 +45396,9 @@ function w5({ productCupColor: i, productCupArtworkUrl: e = null, productCupDeco
         t5(a, c);
       },
       children: [
-        cR ? /* @__PURE__ */ lt.jsx(l5, {}) : null,
+        cR ? /* @__PURE__ */ lt.jsx(a5, {}) : null,
         /* @__PURE__ */ lt.jsx(Ae.Suspense, { fallback: null, children: /* @__PURE__ */ lt.jsx(
-          A5,
+          S5,
           {
             productCupColor: i,
             productCupArtworkUrl: e,
@@ -45412,7 +45411,7 @@ function w5({ productCupColor: i, productCupArtworkUrl: e = null, productCupDeco
   ) });
 }
 c0.preload(lR);
-function M5(i) {
+function w5(i) {
   return i instanceof HTMLElement ? ["INPUT", "TEXTAREA", "SELECT"].includes(i.tagName) || i.isContentEditable : !1;
 }
 function ry({ label: i, value: e, min: t, max: n, step: r, onChange: s }) {
@@ -45443,7 +45442,7 @@ function ry({ label: i, value: e, min: t, max: n, step: r, onChange: s }) {
     )
   ] });
 }
-const E5 = e_.map((i) => ({ value: i, label: bI[i] })), b5 = [
+const M5 = e_.map((i) => ({ value: i, label: bI[i] })), E5 = [
   { label: "Top left", x: 0, y: 0 },
   { label: "Top center", x: 50, y: 0 },
   { label: "Top right", x: 100, y: 0 },
@@ -45528,10 +45527,10 @@ function iy(i, e) {
   const t = Eo(i, "desktop").value, n = Eo(i, e).value;
   return Fz(t, n) ? "synced" : "custom";
 }
-function T5(i) {
+function b5(i) {
   return i === "base" ? "Base" : i === "synced" ? "Matches Desktop" : "Custom";
 }
-const C5 = new Map(
+const T5 = new Map(
   f0.flatMap((i) => {
     const e = /* @__PURE__ */ new Set([i, fR(i), eR(i)]);
     return Array.from(e, (t) => [t.toLowerCase(), i]);
@@ -45545,25 +45544,25 @@ function dR(i) {
 function hR(i) {
   return i === "Scroll Scene: default" ? "desktop" : i === "Scroll Scene / tablet: default" ? "tablet" : i === "Scroll Scene / mobile: default" ? "mobile" : null;
 }
-function R5(i) {
+function C5(i) {
   return i.some((e) => e instanceof HTMLLIElement || e instanceof HTMLElement && e.tagName === "UL");
 }
-function P5(i) {
+function R5(i) {
   return !i || !i.includes("Scroll Scene") ? null : i.includes("Scroll Scene / mobile") ? "mobile" : i.includes("Scroll Scene / tablet") ? "tablet" : i.includes("Scroll Scene: default") ? "desktop" : null;
 }
-function I5(i) {
+function P5(i) {
   var e;
   for (const t of i) {
     if (!(t instanceof HTMLElement) || t.closest(".hover-gui") || t.id === "root" || t === document.body || t === document.documentElement) continue;
     const n = hR(dR(t));
     if (n) return n;
-    const r = P5(((e = t.textContent) == null ? void 0 : e.replace(/\s+/g, " ").trim()) ?? "");
+    const r = R5(((e = t.textContent) == null ? void 0 : e.replace(/\s+/g, " ").trim()) ?? "");
     if (r) return r;
   }
   return null;
 }
-function B5(i) {
-  const e = i.composedPath(), t = R5(e);
+function I5(i) {
+  const e = i.composedPath(), t = C5(e);
   for (const n of e) {
     if (!(n instanceof HTMLElement)) continue;
     const r = dR(n);
@@ -45571,14 +45570,14 @@ function B5(i) {
     const s = hR(r);
     if (s) return { breakpoint: s };
     if (!t) continue;
-    const a = C5.get(r.toLowerCase());
+    const a = T5.get(r.toLowerCase());
     if (!a) continue;
-    const c = I5(e);
+    const c = P5(e);
     return c ? { breakpoint: c, objectId: a } : null;
   }
   return null;
 }
-function D5() {
+function B5() {
   const i = d0(), e = aR(), t = SS(i.breakpointMode, e.breakpoint);
   Ae.useEffect(() => {
     i.enabled && i.breakpointMode === "auto" && Ci.setSelection({ breakpointMode: "desktop" });
@@ -45589,7 +45588,7 @@ function D5() {
   }, [t, i.enabled, i.selectedObject]), Ae.useEffect(() => {
     if (!i.enabled) return;
     function U(G) {
-      const N = B5(G);
+      const N = I5(G);
       if (!N) return;
       const k = N.objectId ?? i.selectedObject;
       Ci.setSelection({ breakpointMode: N.breakpoint, selectedObject: k }), ny(k, N.breakpoint);
@@ -45604,7 +45603,7 @@ function D5() {
     return t !== "desktop" && N.push(Eo(i.selectedObject, "desktop").onValuesChange(U)), () => N.forEach((k) => k());
   }, [t, i.selectedObject]), Ae.useEffect(() => {
     function U(G) {
-      if (!i.enabled || M5(G.target)) return;
+      if (!i.enabled || w5(G.target)) return;
       const N = G.key.toLowerCase();
       N === "g" && (G.preventDefault(), Ci.setSelection({ mode: "translate" })), N === "r" && (G.preventDefault(), Ci.setSelection({ mode: "rotate" })), N === "s" && (G.preventDefault(), Ci.setSelection({ mode: "scale" }));
     }
@@ -45671,7 +45670,7 @@ function D5() {
             },
             children: [
               /* @__PURE__ */ lt.jsx("summary", { children: /* @__PURE__ */ lt.jsx("span", { className: "scene-section-summary-content", children: "Breakpoint" }) }),
-              /* @__PURE__ */ lt.jsx("div", { className: "scene-section-body", children: /* @__PURE__ */ lt.jsx("div", { className: "responsive-gui-options", role: "group", "aria-label": "Breakpoint preview mode", children: E5.map((U) => /* @__PURE__ */ lt.jsx(
+              /* @__PURE__ */ lt.jsx("div", { className: "scene-section-body", children: /* @__PURE__ */ lt.jsx("div", { className: "responsive-gui-options", role: "group", "aria-label": "Breakpoint preview mode", children: M5.map((U) => /* @__PURE__ */ lt.jsx(
                 "button",
                 {
                   type: "button",
@@ -45697,7 +45696,7 @@ function D5() {
             children: [
               /* @__PURE__ */ lt.jsx("summary", { children: /* @__PURE__ */ lt.jsxs("span", { className: "scene-section-summary-content responsive-object-row", children: [
                 /* @__PURE__ */ lt.jsx("span", { children: fR(i.selectedObject) }),
-                /* @__PURE__ */ lt.jsx("strong", { className: "responsive-status is-" + n, children: T5(n) })
+                /* @__PURE__ */ lt.jsx("strong", { className: "responsive-status is-" + n, children: b5(n) })
               ] }) }),
               /* @__PURE__ */ lt.jsx("div", { className: "scene-section-body", children: M ? /* @__PURE__ */ lt.jsxs("div", { className: "responsive-layout-controls", children: [
                 /* @__PURE__ */ lt.jsxs("div", { className: "responsive-viewport-size", children: [
@@ -45709,7 +45708,7 @@ function D5() {
                 /* @__PURE__ */ lt.jsxs("div", { className: "responsive-anchor-actions-row", children: [
                   /* @__PURE__ */ lt.jsxs("div", { className: "responsive-anchor-control", children: [
                     /* @__PURE__ */ lt.jsx("span", { children: "Anchor" }),
-                    /* @__PURE__ */ lt.jsx("div", { className: "responsive-anchor-grid", role: "group", "aria-label": "Screen anchor", children: b5.map((U) => {
+                    /* @__PURE__ */ lt.jsx("div", { className: "responsive-anchor-grid", role: "group", "aria-label": "Screen anchor", children: E5.map((U) => {
                       const G = Math.abs(s.anchor.x - U.x) < 0.01 && Math.abs(s.anchor.y - U.y) < 0.01;
                       return /* @__PURE__ */ lt.jsx(
                         "button",
@@ -45860,12 +45859,12 @@ const sb = [
   { key: "white", label: "White", color: "#f7f7f4", darkColor: "#c9c6bd" },
   { key: "blue", label: "Blue", color: "#47a3e8", darkColor: "#176aa5" },
   { key: "black", label: "Black", color: "#111111", darkColor: "#020202" }
-], ob = "merch-monk-previewing", ab = "merch-monk-editor-active", lb = "merch-monk-webflow-editing", j1 = { minHeight: 360, maxHeight: 1800 }, L5 = {
+], ob = "merch-monk-previewing", ab = "merch-monk-editor-active", lb = "merch-monk-webflow-editing", j1 = { minHeight: 360, maxHeight: 1800 }, D5 = {
   "#ff4a09": "#9f3000",
   "#f5f3c9": "#c9c6a8",
   "#5ba3fc": "#1f63ad",
   "#111111": "#020202"
-}, F5 = /* @__PURE__ */ new Set(["print", "engraved", "digital"]);
+}, L5 = /* @__PURE__ */ new Set(["print", "engraved", "digital"]);
 function pR(i) {
   const e = i == null ? void 0 : i.trim().toLowerCase();
   return e && /^#[0-9a-f]{6}$/i.test(e) ? e : null;
@@ -45874,7 +45873,7 @@ function cb(i, e) {
   const t = pR(i);
   return t ? {
     color: t,
-    darkColor: L5[t] ?? e.darkColor
+    darkColor: D5[t] ?? e.darkColor
   } : e;
 }
 function ub(i, e, t) {
@@ -45902,7 +45901,7 @@ function db(i) {
     height: e.height
   };
 }
-function O5({ runtime: i, productColor: e = "orange", showEditor: t = !1, onSceneReady: n }) {
+function F5({ runtime: i, productColor: e = "orange", showEditor: t = !1, onSceneReady: n }) {
   const r = d0(), s = Ae.useMemo(
     () => sb.find((B) => B.key === e) ?? sb[0],
     [e]
@@ -45923,7 +45922,7 @@ function O5({ runtime: i, productColor: e = "orange", showEditor: t = !1, onScen
         return;
       }
       const U = j.dataset.decorationMethod;
-      if (U && F5.has(U)) {
+      if (U && L5.has(U)) {
         v(U), document.querySelectorAll("[data-decoration-method]").forEach((k) => {
           k.classList.toggle("is-active", k === j);
         });
@@ -45978,7 +45977,7 @@ function O5({ runtime: i, productColor: e = "orange", showEditor: t = !1, onScen
   }, [w, E]);
   return /* @__PURE__ */ lt.jsxs(lt.Fragment, { children: [
     /* @__PURE__ */ lt.jsx(
-      w5,
+      A5,
       {
         productCupColor: a,
         productCupArtworkUrl: d,
@@ -45996,7 +45995,7 @@ function O5({ runtime: i, productColor: e = "orange", showEditor: t = !1, onScen
       /* @__PURE__ */ lt.jsx("button", { className: "merch-monk-resize-handle is-bottom-left", type: "button", tabIndex: -1, onPointerDown: (B) => D("bottom-left", B) }),
       /* @__PURE__ */ lt.jsx("button", { className: "merch-monk-resize-handle is-bottom-right", type: "button", tabIndex: -1, onPointerDown: (B) => D("bottom-right", B) })
     ] }) : null,
-    t ? /* @__PURE__ */ lt.jsx(D5, {}) : null
+    t ? /* @__PURE__ */ lt.jsx(B5, {}) : null
   ] });
 }
 function hb() {
@@ -46033,7 +46032,7 @@ function hb() {
   }
   a.render(
     /* @__PURE__ */ lt.jsx(gI.StrictMode, { children: /* @__PURE__ */ lt.jsx(EI, { value: c, children: /* @__PURE__ */ lt.jsx(
-      O5,
+      F5,
       {
         runtime: c,
         productColor: i.productColor,
