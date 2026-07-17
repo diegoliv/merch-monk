@@ -176,9 +176,13 @@ function cloneNode(
     composite.add(cloned);
     composite.updateMatrixWorld(true);
 
-    const child = backgroundChildId ? cloned.getObjectByName(backgroundChildId) : null;
-    if (child) composite.attach(child);
-
+    const child = backgroundChildId
+      ? cloned.getObjectByName(THREE.PropertyBinding.sanitizeNodeName(backgroundChildId))
+      : null;
+    if (child && backgroundChildId) {
+      child.name = backgroundChildId;
+      composite.attach(child);
+    }
 
     composite.updateMatrixWorld(true);
 
@@ -598,6 +602,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
   const { camera, gl } = useThree();
   const groupRef = useRef<THREE.Group | null>(null);
   const pointerRef = useRef(new THREE.Vector2());
+  const raycasterRef = useRef(new THREE.Raycaster());
   const tiltRef = useRef(new THREE.Vector2());
   const targetTiltRef = useRef(new THREE.Vector2());
   const baseEulerRef = useRef(new THREE.Euler());
@@ -963,18 +968,25 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
       targetTiltRef.current.set(0, 0);
     } else {
       groupRef.current.updateMatrixWorld(true);
-      boxRef.current.setFromObject(motionObject);
-      boxRef.current.getCenter(centerRef.current).project(camera);
+      raycasterRef.current.setFromCamera(pointerRef.current, camera);
 
-      const horizontal = pointerRef.current.x - centerRef.current.x;
-      const vertical = pointerRef.current.y - centerRef.current.y;
-      const distance = Math.hypot(horizontal, vertical);
-      const influence = THREE.MathUtils.clamp(distance / hoverRange, 0, 1);
-
-      if (distance < 0.001) {
+      const isPointerOverObject = raycasterRef.current.intersectObject(motionObject, true).length > 0;
+      if (isPointerOverObject) {
         targetTiltRef.current.set(0, 0);
       } else {
-        targetTiltRef.current.set((-vertical / distance) * influence * hoverTiltX, (horizontal / distance) * influence * hoverTiltY);
+        boxRef.current.setFromObject(motionObject);
+        boxRef.current.getCenter(centerRef.current).project(camera);
+
+        const horizontal = pointerRef.current.x - centerRef.current.x;
+        const vertical = pointerRef.current.y - centerRef.current.y;
+        const distance = Math.hypot(horizontal, vertical);
+        const influence = THREE.MathUtils.clamp(distance / hoverRange, 0, 1);
+
+        if (distance < 0.001) {
+          targetTiltRef.current.set(0, 0);
+        } else {
+          targetTiltRef.current.set((-vertical / distance) * influence * hoverTiltX, (horizontal / distance) * influence * hoverTiltY);
+        }
       }
     }
 
