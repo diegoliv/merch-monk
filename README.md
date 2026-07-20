@@ -232,9 +232,10 @@ The active production breakpoint is resolved from the host width:
 
 Desktop is the base. In the `Scene Controls` panel:
 
-- `Use Desktop` copies the object and its timeline from desktop to the active breakpoint;
-- `Send to All` sends the object and its timeline from the active breakpoint to the other two;
-- the status displays `Base`, `Matches Desktop`, or `Custom`;
+- `Copy from...` copies the object and its complete timeline from a selected source into the active breakpoint;
+- `Copy to...` sends the active object and its complete timeline to one selected breakpoint or to both other breakpoints;
+- each transfer reports its source and destination after the copy finishes;
+- the status compares normalized values and keyframes and displays `Base`, `Matches Desktop`, `Matches Tablet`, `Matches Mobile`, or `Custom`;
 - `G`, `R`, and `S` switch between translate, rotate, and scale when a text field is not focused.
 
 If an older JSON file does not contain tablet or mobile, `prepareTheatreState()` clones the desktop sheet to fill the missing sheet. This keeps the scene working, but those breakpoints will not yet have their own direction.

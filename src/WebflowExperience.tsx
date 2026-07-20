@@ -6,6 +6,8 @@ import { editorStore, useEditorStore } from "./three/editorStore";
 import { productCupColors, type ProductCupColorKey, type ProductCupColorValue, type ProductCupDecorationMethod } from "./components/StorySections";
 import type { ExperienceRuntime } from "./experienceRuntime";
 import type { Breakpoint } from "./three/types";
+import { enableWebflowBreakpointPreview } from "./webflowBreakpointPreview";
+import { useWebflowEditorScrollProxy } from "./useWebflowEditorScrollProxy";
 
 type WebflowExperienceProps = {
   runtime: ExperienceRuntime;
@@ -153,6 +155,11 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
   }, [editor.enabled, showEditor]);
 
   useEffect(() => {
+    if (!isPreviewingBreakpoint || !pageElement) return;
+    return enableWebflowBreakpointPreview();
+  }, [isPreviewingBreakpoint, pageElement]);
+
+  useEffect(() => {
     if (!pageElement) return;
 
     const previousInline = pageElement.getAttribute("style");
@@ -202,7 +209,7 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
     pageElement.style.setProperty("--preview-max-width", `${previewRange.maxWidth}px`);
     pageElement.style.setProperty("--preview-min-height", `${previewRange.minHeight}px`);
     pageElement.style.setProperty("--preview-max-height", `${previewRange.maxHeight}px`);
-    pageElement.setAttribute("data-lenis-prevent", "");
+    pageElement.removeAttribute("data-lenis-prevent");
   }, [activeBreakpoint, editor.enabled, isPreviewingBreakpoint, pageElement, previewSize.height, previewSize.width, showEditor]);
 
   const startResize = useCallback((direction: ResizeDirection, event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -236,6 +243,12 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
   }, [activeBreakpoint, previewSize]);
+
+  useWebflowEditorScrollProxy({
+    enabled: isPreviewingBreakpoint,
+    pageElement,
+    layoutKey: `${activeBreakpoint}:${previewSize.width}:${previewSize.height}`,
+  });
 
   return (
     <>

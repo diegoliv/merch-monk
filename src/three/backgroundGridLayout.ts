@@ -28,6 +28,7 @@ export type BackgroundGridLayout = {
 };
 
 const backgroundGridFullScale = 28;
+const backgroundResponsiveFullScale = 10;
 export const crewneckGridDefaults: CrewneckGridSettings = {
   follow: 1,
   offset: { x: 0, y: 0 },
@@ -140,9 +141,12 @@ export function getCrewneckGridFollowWeight(
   settings: CrewneckGridSettings,
   viewport: ViewportInfo,
 ) {
-  if (!usesBackgroundGridLayout(backgroundState, viewport) || !backgroundState.visible) return 0;
+  if (!backgroundState.visible) return 0;
 
-  const presence = clamp(backgroundState.scale / backgroundGridFullScale, 0, 1);
+  const fullScale = usesBackgroundGridLayout(backgroundState, viewport)
+    ? backgroundGridFullScale
+    : backgroundResponsiveFullScale;
+  const presence = clamp(backgroundState.scale / fullScale, 0, 1);
   const easedPresence = presence * presence * (3 - 2 * presence);
   return clamp(settings.follow, 0, 1) * easedPresence * clamp(backgroundState.opacity, 0, 1);
 }

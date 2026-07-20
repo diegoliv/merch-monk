@@ -369,6 +369,40 @@ function getTheatrePropPaths(object: ReturnType<typeof getTheatreObject>): Theat
 
   return paths.map((pathToProp) => ({ pathToProp, pointer: getPointerAtPath(object, pathToProp) }));
 }
+
+function getValueAtPath(value: unknown, pathToProp: string[]) {
+  return pathToProp.reduce<unknown>((current, key) => (
+    current && typeof current === "object" ? (current as Record<string, unknown>)[key] : undefined
+  ), value);
+}
+
+export function getTheatreObjectStateSignature(objectId: ObjectId, breakpoint: Breakpoint) {
+  const sheet = getTheatreSheet(breakpoint);
+  const object = getTheatreObject(objectId, breakpoint);
+  const objectValue = object.value as TheatreObjectValue;
+  const propertyStates = getTheatrePropPaths(object).map(({ pathToProp, pointer }) => {
+    const keyframes = cloneSerializable(
+      sheet.sequence.__experimental_getKeyframes(pointer as never) as TheatreKeyframe[],
+    )
+      .map(({ position, value, handles, connectedRight, type }) => ({
+        position,
+        value,
+        handles,
+        connectedRight,
+        type,
+      }))
+      .sort((left, right) => left.position - right.position);
+
+    return {
+      pathToProp,
+      value: keyframes.length === 0 ? getValueAtPath(objectValue, pathToProp) : undefined,
+      keyframes,
+    };
+  });
+
+  return JSON.stringify(propertyStates);
+}
+
 function copyTheatreObjectTimelineState(
   studio: Studio,
   objectId: ObjectId,

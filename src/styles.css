@@ -544,6 +544,7 @@ main {
   background: rgba(255, 255, 255, 0.12);
   font: 900 10px/1 var(--font-body);
   text-align: center;
+  white-space: nowrap;
 }
 
 .responsive-status.is-synced {
@@ -576,6 +577,80 @@ main {
   color: rgba(255, 255, 255, 0.38);
   background: rgba(255, 255, 255, 0.06);
   cursor: not-allowed;
+}
+
+.responsive-breakpoint-transfer {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.responsive-layout-controls > .responsive-breakpoint-transfer {
+  margin-top: 0;
+}
+
+.responsive-transfer-heading {
+  color: rgba(255, 255, 255, 0.56);
+  font: 900 9px/1 var(--font-body);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.responsive-transfer-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 5px;
+}
+
+.responsive-transfer-row > span {
+  color: rgba(255, 255, 255, 0.64);
+  font: 900 10px/1 var(--font-body);
+}
+
+.responsive-transfer-row select,
+.responsive-transfer-row button {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  font: 900 10px/1 var(--font-body);
+}
+
+.responsive-transfer-row select {
+  padding: 0 6px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.responsive-transfer-row select option {
+  color: #111111;
+  background: #ffffff;
+}
+
+.responsive-transfer-row button {
+  padding: 0 6px;
+  color: #111111;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.responsive-transfer-row select:disabled,
+.responsive-transfer-row button:disabled {
+  color: rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: not-allowed;
+}
+
+.responsive-transfer-notice {
+  color: rgba(255, 255, 255, 0.72);
+  font: 700 10px/1.25 var(--font-body);
+}
+
+.responsive-transfer-notice.is-error {
+  color: #ff9b76;
 }
 
 .theatre-export-actions {
@@ -1674,17 +1749,26 @@ main {
 }
 
 .merch-monk-page.merch-monk-previewing {
+  position: fixed;
+  inset: 0 0 auto;
   width: clamp(var(--preview-min-width), var(--preview-width), min(var(--preview-max-width), calc(100vw - 360px)));
   height: clamp(var(--preview-min-height), var(--preview-height), var(--preview-max-height));
   min-height: 0;
   margin: 0 auto;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   border: 1px solid rgba(17, 17, 17, 0.08);
   border-radius: 10px;
   background: #ffffff;
   box-shadow: 0 24px 70px rgba(17, 17, 17, 0.16);
-  container: page-preview / inline-size;
+  container: page-preview / size;
+}
+
+.merch-monk-preview-scroll-spacer {
+  width: 1px;
+  min-height: 100vh;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .merch-monk-page.merch-monk-previewing.is-desktop-layout {

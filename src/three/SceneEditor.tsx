@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { breakpointLabels, breakpoints, resolveBreakpointMode } from "./breakpoints";
 import { editorStore, useEditorStore } from "./editorStore";
 import { backgroundChildObjectIds, boxChildObjectIds, objectIds } from "./sceneObjects";
-import { areTheatreObjectValuesEqual, getTheatreObject, theatreObjectName, type TheatreObjectValue } from "./theatreProject";
+import { getTheatreObject, theatreObjectName, type TheatreObjectValue } from "./theatreProject";
 import {
   copyTheatreObjectValue,
   copyTheatreObjectValueToBreakpoints,
   downloadMinifiedTheatreProject,
+  getTheatreObjectStateSignature,
   hideTheatreStudio,
   showTheatreStudio,
   setTheatreObjectValue,
@@ -28,7 +29,13 @@ type HoverControlProps = {
   onChange: (value: number) => void;
 };
 
-type ResponsiveStatus = "base" | "synced" | "custom";
+type ResponsiveStatus =
+  | { kind: "base" }
+  | { kind: "synced"; breakpoint: Breakpoint }
+  | { kind: "custom" };
+
+type CopyTarget = Breakpoint | "all" | "";
+type CopyNotice = { kind: "success" | "error"; message: string } | null;
 
 function HoverControl({ label, value, min, max, step, onChange }: HoverControlProps) {
   return (
@@ -161,17 +168,24 @@ function formatObjectId(id: ObjectId) {
 }
 
 function readResponsiveStatus(objectId: ObjectId, activeBreakpoint: Breakpoint): ResponsiveStatus {
-  if (activeBreakpoint === "desktop") return "base";
+  if (activeBreakpoint === "desktop") return { kind: "base" };
 
-  const desktopValue = getTheatreObject(objectId, "desktop").value as TheatreObjectValue;
-  const activeValue = getTheatreObject(objectId, activeBreakpoint).value as TheatreObjectValue;
-  return areTheatreObjectValuesEqual(desktopValue, activeValue) ? "synced" : "custom";
+  const activeSignature = getTheatreObjectStateSignature(objectId, activeBreakpoint);
+  const matchingBreakpoint = breakpoints.find((breakpoint) => (
+    breakpoint !== activeBreakpoint && getTheatreObjectStateSignature(objectId, breakpoint) === activeSignature
+  ));
+
+  return matchingBreakpoint ? { kind: "synced", breakpoint: matchingBreakpoint } : { kind: "custom" };
 }
 
 function responsiveStatusLabel(status: ResponsiveStatus) {
-  if (status === "base") return "Base";
-  if (status === "synced") return "Matches Desktop";
+  if (status.kind === "base") return "Base";
+  if (status.kind === "synced") return `Matches ${breakpointLabels[status.breakpoint]}`;
   return "Custom";
+}
+
+function defaultCopySource(activeBreakpoint: Breakpoint): Breakpoint {
+  return activeBreakpoint === "desktop" ? "tablet" : "desktop";
 }
 
 type TheatreTreeTarget = {
@@ -263,6 +277,16 @@ export function SceneEditor() {
   const [expandedSections, setExpandedSections] = useState({ breakpoints: true, object: true, hover: true, export: true });
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
+  const [copySource, setCopySource] = useState<Breakpoint>(() => defaultCopySource(activeBreakpoint));
+  const [copyTarget, setCopyTarget] = useState<CopyTarget>("");
+  const [copyNotice, setCopyNotice] = useState<CopyNotice>(null);
+  const [isCopying, setIsCopying] = useState(false);
+
+  useEffect(() => {
+    setCopySource(defaultCopySource(activeBreakpoint));
+    setCopyTarget("");
+    setCopyNotice(null);
+  }, [activeBreakpoint, editor.selectedObject]);
 
   useEffect(() => {
     if (editor.enabled) {
@@ -294,12 +318,9 @@ export function SceneEditor() {
     }
 
     updateStatus();
-    const activeObject = getTheatreObject(editor.selectedObject, activeBreakpoint);
-    const unsubscribers = [activeObject.onValuesChange(updateStatus)];
-
-    if (activeBreakpoint !== "desktop") {
-      unsubscribers.push(getTheatreObject(editor.selectedObject, "desktop").onValuesChange(updateStatus));
-    }
+    const unsubscribers = breakpoints.map((breakpoint) => (
+      getTheatreObject(editor.selectedObject, breakpoint).onValuesChange(updateStatus)
+    ));
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, [activeBreakpoint, editor.selectedObject]);
@@ -346,21 +367,45 @@ export function SceneEditor() {
     });
   }
 
-  async function useDesktopForActiveObject() {
-    if (activeBreakpoint === "desktop") return;
+  async function copyBreakpointState(sourceBreakpoint: Breakpoint, targetBreakpoints: Breakpoint[]) {
+    if (targetBreakpoints.length === 0 || targetBreakpoints.includes(sourceBreakpoint)) return;
 
     const selectedObject = editor.selectedObject;
-    await copyTheatreObjectValue(selectedObject, "desktop", activeBreakpoint);
-    editorStore.setSelection({ breakpointMode: activeBreakpoint, selectedObject });
-    await showTheatreStudio(selectedObject, activeBreakpoint);
-    setResponsiveStatus(readResponsiveStatus(selectedObject, activeBreakpoint));
+    setIsCopying(true);
+    setCopyNotice(null);
+
+    try {
+      if (targetBreakpoints.length === 1) {
+        await copyTheatreObjectValue(selectedObject, sourceBreakpoint, targetBreakpoints[0]);
+      } else {
+        await copyTheatreObjectValueToBreakpoints(selectedObject, sourceBreakpoint, targetBreakpoints);
+      }
+
+      await showTheatreStudio(selectedObject, activeBreakpoint);
+      setResponsiveStatus(readResponsiveStatus(selectedObject, activeBreakpoint));
+      const targets = targetBreakpoints.map((breakpoint) => breakpointLabels[breakpoint]).join(" + ");
+      setCopyNotice({
+        kind: "success",
+        message: `${breakpointLabels[sourceBreakpoint]} -> ${targets} copied`,
+      });
+    } catch (error) {
+      console.error("Could not copy the Theatre object between breakpoints.", error);
+      setCopyNotice({ kind: "error", message: "Copy failed. Check the console." });
+    } finally {
+      setIsCopying(false);
+    }
   }
 
-  async function sendActiveObjectToAllBreakpoints() {
-    const targetBreakpoints = breakpoints.filter((breakpoint) => breakpoint !== activeBreakpoint);
-    await copyTheatreObjectValueToBreakpoints(editor.selectedObject, activeBreakpoint, targetBreakpoints);
-    await showTheatreStudio(editor.selectedObject, activeBreakpoint);
-    setResponsiveStatus(readResponsiveStatus(editor.selectedObject, activeBreakpoint));
+  function copyFromSelectedBreakpoint() {
+    void copyBreakpointState(copySource, [activeBreakpoint]);
+  }
+
+  function copyToSelectedBreakpoints() {
+    if (!copyTarget) return;
+    const targetBreakpoints = copyTarget === "all"
+      ? breakpoints.filter((breakpoint) => breakpoint !== activeBreakpoint)
+      : [copyTarget];
+    void copyBreakpointState(activeBreakpoint, targetBreakpoints);
   }
 
   async function exportMinifiedProject() {
@@ -376,6 +421,47 @@ export function SceneEditor() {
       setIsExporting(false);
     }
   }
+
+  const transferControls = (
+    <div className="responsive-breakpoint-transfer">
+      <div className="responsive-transfer-heading">Copy object + timeline</div>
+      <div className="responsive-transfer-row">
+        <span>From</span>
+        <select
+          aria-label="Copy from breakpoint"
+          value={copySource}
+          disabled={isCopying}
+          onChange={(event) => setCopySource(event.currentTarget.value as Breakpoint)}
+        >
+          {breakpoints.map((breakpoint) => (
+            <option key={breakpoint} value={breakpoint}>{breakpointLabels[breakpoint]}</option>
+          ))}
+        </select>
+        <button type="button" disabled={isCopying || copySource === activeBreakpoint} onClick={copyFromSelectedBreakpoint}>Copy</button>
+      </div>
+      <div className="responsive-transfer-row">
+        <span>To</span>
+        <select
+          aria-label="Copy to breakpoint"
+          value={copyTarget}
+          disabled={isCopying}
+          onChange={(event) => setCopyTarget(event.currentTarget.value as CopyTarget)}
+        >
+          <option value="">Choose</option>
+          {breakpoints.map((breakpoint) => (
+            <option key={breakpoint} value={breakpoint}>{breakpointLabels[breakpoint]}</option>
+          ))}
+          <option value="all">All others</option>
+        </select>
+        <button type="button" disabled={isCopying || !copyTarget || copyTarget === activeBreakpoint} onClick={copyToSelectedBreakpoints}>Copy</button>
+      </div>
+      {copyNotice ? (
+        <div className={`responsive-transfer-notice is-${copyNotice.kind}`} role="status" aria-live="polite">
+          {copyNotice.message}
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <>
@@ -430,15 +516,14 @@ export function SceneEditor() {
             <summary>
               <span className="scene-section-summary-content responsive-object-row">
                 <span>{formatObjectId(editor.selectedObject)}</span>
-                <strong className={"responsive-status is-" + responsiveStatus}>{responsiveStatusLabel(responsiveStatus)}</strong>
+                <strong className={"responsive-status is-" + responsiveStatus.kind}>{responsiveStatusLabel(responsiveStatus)}</strong>
               </span>
             </summary>
             <div className="scene-section-body">
               {isLayoutObject ? (
                 <div className="responsive-layout-controls">
                   <div className="responsive-viewport-size">{viewport.width} &times; {viewport.height}px</div>
-                  <div className="responsive-anchor-actions-row">
-                    <div className="responsive-anchor-control">
+                  <div className="responsive-anchor-control">
                     <span>Anchor</span>
                     <div className="responsive-anchor-grid" role="group" aria-label="Screen anchor">
                       {anchorPresets.map((preset) => {
@@ -457,13 +542,9 @@ export function SceneEditor() {
                           </button>
                         );
                       })}
-                      </div>
-                    </div>
-                    <div className="responsive-actions responsive-anchor-actions">
-                      <button type="button" disabled={activeBreakpoint === "desktop"} onClick={useDesktopForActiveObject}>Use Desktop</button>
-                      <button type="button" onClick={sendActiveObjectToAllBreakpoints}>Send to All</button>
                     </div>
                   </div>
+                  {transferControls}
                   <div className="responsive-transform-fields">
                     <span className="responsive-control-label">Transform</span>
                     <div className="responsive-transform-row">
@@ -502,10 +583,7 @@ export function SceneEditor() {
               ) : (
                 <>
                   <div className="responsive-local-transform-note">{isBoxChild ? "Local box transform" : "Local background child transform"}</div>
-                  <div className="responsive-actions">
-                    <button type="button" disabled={activeBreakpoint === "desktop"} onClick={useDesktopForActiveObject}>Use Desktop</button>
-                    <button type="button" onClick={sendActiveObjectToAllBreakpoints}>Send to All</button>
-                  </div>
+                  {transferControls}
                 </>
               )}
             </div>
