@@ -150,9 +150,9 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
   }, [activeBreakpoint, isPreviewingBreakpoint]);
 
   useEffect(() => {
-    document.body.classList.toggle(bodyEditorActiveClass, showEditor && editor.enabled);
+    document.body.classList.toggle(bodyEditorActiveClass, showEditor);
     return () => document.body.classList.remove(bodyEditorActiveClass);
-  }, [editor.enabled, showEditor]);
+  }, [showEditor]);
 
   useEffect(() => {
     if (!isPreviewingBreakpoint || !pageElement) return;

@@ -490,16 +490,31 @@ export async function getTheatreStudio() {
   return loadStudio();
 }
 
+function setTheatreStudioHostVisible(visible: boolean) {
+  const host = document.getElementById("theatrejs-studio-root");
+  if (!host) return;
+
+  if (visible) {
+    host.style.removeProperty("display");
+  } else {
+    host.style.setProperty("display", "none");
+  }
+}
+
 export async function showTheatreStudio(objectId: ObjectId, breakpoint: Breakpoint = "desktop") {
+  setTheatreStudioHostVisible(true);
   const studio = await loadStudio();
+  setTheatreStudioHostVisible(true);
   studio.ui.restore();
   selectSheetAndObject(studio, objectId, breakpoint);
 }
 
 export async function hideTheatreStudio() {
+  setTheatreStudioHostVisible(false);
   if (!studioPromise) return;
   const studio = await studioPromise;
   studio.ui.hide();
+  setTheatreStudioHostVisible(false);
 }
 
 export async function selectTheatreObject(objectId: ObjectId, breakpoint: Breakpoint = "desktop") {
