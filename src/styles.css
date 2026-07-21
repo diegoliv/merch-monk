@@ -415,6 +415,7 @@ main {
   box-shadow: 0 14px 44px rgba(17, 17, 17, 0.2);
   font: 800 12px/1 var(--font-body);
   cursor: pointer;
+  pointer-events: auto;
   backdrop-filter: blur(12px);
 }
 

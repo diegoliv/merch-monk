@@ -1,5 +1,6 @@
 import type { IExtension } from "@theatre/studio";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { breakpointLabels, breakpoints, resolveBreakpointMode } from "./breakpoints";
 import { editorStore, useEditorStore } from "./editorStore";
@@ -786,7 +787,7 @@ export function SceneEditor() {
 
   if (editor.enabled) return null;
 
-  return (
+  return createPortal(
     <button
       className="theatre-studio-button"
       type="button"
@@ -794,6 +795,7 @@ export function SceneEditor() {
       onClick={() => editorStore.setSelection({ enabled: true })}
     >
       Edit motion
-    </button>
+    </button>,
+    document.body,
   );
 }
