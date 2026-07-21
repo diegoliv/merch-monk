@@ -116,6 +116,20 @@ https://merch-monk.webflow.io/?editor=true
 </script>
 ```
 
+### Preview the local Theatre state in production
+
+The Theatre controls include **Preview in production** next to the JSON export action. It captures the current Theatre project through Theatre's export API, stores a browser-local snapshot, and opens the same Webflow URL with:
+
+```text
+?mmState=local
+```
+
+This preview uses the published production bundle, CSS, and GLB with the editor disabled. Only the Theatre state comes from the local snapshot. The configured `theatreStateUrl` is ignored for that tab.
+
+The editor and preview tabs must use the same Webflow origin so they can share the snapshot. If the snapshot is missing, invalid, or belongs to another Theatre project, the loader stops before importing the production bundle and shows a visible error instead of silently falling back to the external or bundled state.
+
+For diagnostics, `window.MerchMonkWebflow.runtimeSource` remains `production`, `window.MerchMonkWebflow.stateSource` is `local-preview`, and the canvas receives `data-merch-monk-state-source="local-preview"`. Remove `mmState=local` to return to the configured production state.
+
 ### `window.MerchMonkWebflow` configuration
 
 | Field | Default | Purpose |
@@ -135,8 +149,9 @@ https://merch-monk.webflow.io/?editor=true
 | `theatreState` | — | Inline JSON object; takes precedence over `theatreStateUrl` |
 | `theatreStateUrl` | — | Public URL for a Theatre export |
 | `theatreStateTimeoutMs` | `6000` | Timeout for the external JSON |
+| `stateSource` | Set by the loader | Diagnostic state source: `bundled`, `bundled-fallback`, `external`, `inline`, `local-preview`, or `local-preview-error` |
 | `onReady(detail)` | — | Callback invoked when the scene is usable |
-| `runtimeSource` | Set by the loader | Diagnostic value: `local-loading`, `local`, `local-error`, or `production` |
+| `runtimeSource` | Set by the loader | Diagnostic value: `local-loading`, `local`, `local-error`, `local-state-error`, or `production` |
 
 The external JSON is loaded before the production bundle is imported because the Theatre project is initialized during module import. In local mode, the loader does not fetch `theatreStateUrl`; use the bundled state or provide `theatreState` inline.
 
@@ -213,6 +228,16 @@ Dispatched when the local runtime import fails.
 ```js
 window.addEventListener("merch-monk:local-error", (event) => {
   console.error("Local editor unavailable", event.detail.origin, event.detail.error);
+});
+```
+
+### `merch-monk:local-state-error`
+
+Dispatched when `mmState=local` cannot read or validate the saved preview snapshot. In this mode the production bundle is intentionally not imported.
+
+```js
+window.addEventListener("merch-monk:local-state-error", (event) => {
+  console.error("Local state preview unavailable", event.detail.storageKey, event.detail.error);
 });
 ```
 
@@ -357,6 +382,7 @@ The same `detail` object is passed to `window.MerchMonkStudio.onReady`. The host
 | --- | --- |
 | Nothing mounts | Confirm `canvasSelector`/`mountSelector` and look for the missing-target warning in the console |
 | Local editor does not open | Confirm `npm run dev`, port 5173, and the `merch-monk:local-error` event |
+| Local production preview shows an error | Return to the editor on the same Webflow origin and click **Preview in production** again |
 | External state is ignored | Check the public URL, CORS, `definitionVersion`, `sheetsById`, and whether inline `theatreState` is overriding the URL |
 | Tablet/mobile repeat desktop | Confirm that the JSON contains `Scroll Scene / tablet` and `Scroll Scene / mobile` |
 | Scroll does not animate a step | Confirm the corresponding class or `data-scene` attribute and the section's actual height |

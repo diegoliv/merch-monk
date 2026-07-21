@@ -9,6 +9,7 @@ import {
   downloadMinifiedTheatreProject,
   getTheatreObjectStateSignature,
   hideTheatreStudio,
+  saveTheatreProductionPreview,
   showTheatreStudio,
   setTheatreObjectValue,
 } from "./theatreStudio";
@@ -276,6 +277,7 @@ export function SceneEditor() {
   const [controlsExpanded, setControlsExpanded] = useState(true);
   const [expandedSections, setExpandedSections] = useState({ breakpoints: true, object: true, hover: true, export: true });
   const [isExporting, setIsExporting] = useState(false);
+  const [isPreviewingProduction, setIsPreviewingProduction] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
   const [copySource, setCopySource] = useState<Breakpoint>(() => defaultCopySource(activeBreakpoint));
   const [copyTarget, setCopyTarget] = useState<CopyTarget>("");
@@ -419,6 +421,27 @@ export function SceneEditor() {
       setExportStatus("Export failed. Check the console for details.");
     } finally {
       setIsExporting(false);
+    }
+  }
+
+  async function previewProductionProject() {
+    const previewWindow = window.open("about:blank", "_blank");
+    setIsPreviewingProduction(true);
+    setExportStatus("");
+
+    try {
+      const result = await saveTheatreProductionPreview();
+      if (!previewWindow) throw new Error("The production preview window was blocked by the browser.");
+
+      previewWindow.opener = null;
+      previewWindow.location.replace(result.url);
+      setExportStatus((result.bytes / 1024).toFixed(1) + " KB | Local state opened in production");
+    } catch (error) {
+      previewWindow?.close();
+      console.error("Could not open the Theatre production preview.", error);
+      setExportStatus("Preview failed. Check the console or allow popups.");
+    } finally {
+      setIsPreviewingProduction(false);
     }
   }
 
@@ -624,10 +647,18 @@ export function SceneEditor() {
               <button
                 className="theatre-export-button"
                 type="button"
-                disabled={isExporting}
+                disabled={isExporting || isPreviewingProduction}
                 onClick={exportMinifiedProject}
               >
                 {isExporting ? "Exporting..." : "Export minified JSON"}
+              </button>
+              <button
+                className="theatre-export-button is-preview"
+                type="button"
+                disabled={isExporting || isPreviewingProduction}
+                onClick={previewProductionProject}
+              >
+                {isPreviewingProduction ? "Preparing..." : "Preview in production"}
               </button>
               <span className="theatre-export-status" aria-live="polite">{exportStatus}</span>
             </div>
@@ -648,7 +679,5 @@ export function SceneEditor() {
     </>
   );
 }
-
-
 
 

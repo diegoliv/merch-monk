@@ -1,3 +1,4 @@
+import type { __UNSTABLE_Project_OnDiskState } from "@theatre/core";
 import { cloneTheatreObjectValue, getTheatreObject, getTheatreSheet, theatreProjectId, type TheatreObjectValue } from "./theatreProject";
 import { backgroundChildByParent } from "./sceneObjects";
 import type { Breakpoint, ObjectId } from "./types";
@@ -60,6 +61,16 @@ type TheatreStateEditors = {
 
 let studioPromise: Promise<Studio> | null = null;
 let initialized = false;
+
+export const theatrePreviewStorageKey = "merch-monk-theatre-preview-state";
+export const theatrePreviewQueryParam = "mmState";
+
+type TheatrePreviewSnapshot = {
+  version: 1;
+  projectId: string;
+  savedAt: string;
+  state: __UNSTABLE_Project_OnDiskState;
+};
 
 const theatreOutlineStyleId = "merch-monk-theatre-outline-style";
 const theatreChildFolderNames = new Set(["box", ...Object.keys(backgroundChildByParent)]);
@@ -554,6 +565,30 @@ export async function exportTheatreProject() {
 
 export function minifyTheatreProjectState(state: Record<string, unknown>) {
   return JSON.stringify(state);
+}
+
+export async function saveTheatreProductionPreview() {
+  const state = await exportTheatreProject() as unknown as __UNSTABLE_Project_OnDiskState;
+  const stateContent = minifyTheatreProjectState(state as unknown as Record<string, unknown>);
+  const savedAt = new Date().toISOString();
+  const snapshot: TheatrePreviewSnapshot = {
+    version: 1,
+    projectId: theatreProjectId,
+    savedAt,
+    state,
+  };
+
+  window.localStorage.setItem(theatrePreviewStorageKey, JSON.stringify(snapshot));
+
+  const previewUrl = new URL(window.location.href);
+  previewUrl.searchParams.delete("editor");
+  previewUrl.searchParams.set(theatrePreviewQueryParam, "local");
+
+  return {
+    bytes: new Blob([stateContent]).size,
+    savedAt,
+    url: previewUrl.toString(),
+  };
 }
 
 export async function downloadMinifiedTheatreProject(filename = "merch-monk-home_state.json") {

@@ -8,11 +8,16 @@
   var productionEntry = config.productionEntry || normalizedProductionBase + "merch-monk-webflow.js";
   var productionCss = config.productionCss || normalizedProductionBase + "style.css";
   var localTimeoutMs = config.localTimeoutMs || 2500;
-  var editorRequested = new URLSearchParams(window.location.search).get("editor") === "true";
-  var preferLocal = editorRequested || config.preferLocal === true;
+  var searchParams = new URLSearchParams(window.location.search);
+  var editorRequested = searchParams.get("editor") === "true";
+  var localStatePreviewRequested = searchParams.get("mmState") === "local";
+  var localStatePreviewKey = "merch-monk-theatre-preview-state";
+  var theatreProjectId = "Merch Monk Scene Responsive";
+  var preferLocal = !localStatePreviewRequested && (editorRequested || config.preferLocal === true);
   var loaded = false;
   var productionLoading = false;
   var localFallbackTimer = null;
+  var localStatePreviewReady = !localStatePreviewRequested;
   var hasCustomEditor = typeof config.editor === "boolean";
   var hasCustomModelUrl = Boolean(config.modelUrl);
 
@@ -23,7 +28,8 @@
     window.globalThis.process = window.process;
   }
 
-  if (editorRequested) config.editor = true;
+  if (localStatePreviewRequested) config.editor = false;
+  else if (editorRequested) config.editor = true;
   else if (!hasCustomEditor) config.editor = false;
   if (!hasCustomModelUrl) {
     config.modelUrl = preferLocal
@@ -68,17 +74,78 @@
     );
   }
 
+  function showLocalStatePreviewError(error) {
+    var message = error instanceof Error ? error.message : String(error);
+    config.runtimeSource = "local-state-error";
+    config.stateSource = "local-preview-error";
+    console.error("[Merch Monk] Local Theatre state preview failed. Production was not started.", error);
+    document.documentElement.setAttribute("data-merch-monk-state-source", "local-preview-error");
+
+    function appendNotice() {
+      if (!document.body || document.querySelector("[data-merch-monk-local-state-error]")) return;
+      var notice = document.createElement("div");
+      notice.setAttribute("data-merch-monk-local-state-error", "true");
+      notice.setAttribute("role", "alert");
+      notice.style.cssText = "position:fixed;left:16px;right:16px;top:16px;z-index:2147483647;padding:12px 14px;border:1px solid #ff4a09;border-radius:8px;background:#17110f;color:#fff;font:600 13px/1.4 system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.35)";
+      notice.textContent = "Merch Monk local state preview unavailable: " + message;
+      document.body.appendChild(notice);
+    }
+
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", appendNotice, { once: true });
+    else appendNotice();
+
+    window.dispatchEvent(new CustomEvent("merch-monk:local-state-error", {
+      detail: { error: error, storageKey: localStatePreviewKey },
+    }));
+  }
+
+  function prepareLocalStatePreview() {
+    if (!localStatePreviewRequested) return true;
+
+    try {
+      var serializedSnapshot = window.localStorage.getItem(localStatePreviewKey);
+      if (!serializedSnapshot) throw new Error("No preview snapshot found. Return to the Theatre editor and click Preview in production.");
+
+      var snapshot = JSON.parse(serializedSnapshot);
+      if (!snapshot || snapshot.version !== 1 || snapshot.projectId !== theatreProjectId) {
+        throw new Error("The saved preview snapshot is incompatible with this experience.");
+      }
+      if (!isValidTheatreState(snapshot.state)) throw new Error("The saved preview snapshot does not contain valid Theatre state.");
+
+      config.theatreState = snapshot.state;
+      delete config.theatreStateUrl;
+      config.stateSource = "local-preview";
+      config.localStateSavedAt = snapshot.savedAt;
+      document.documentElement.setAttribute("data-merch-monk-state-source", "local-preview");
+      console.info("[Merch Monk] Using local Theatre state snapshot from " + snapshot.savedAt + ".");
+      return true;
+    } catch (error) {
+      showLocalStatePreviewError(error);
+      return false;
+    }
+  }
+
   function loadProduction() {
     if (loaded || productionLoading) return;
+    if (!localStatePreviewReady) return;
     productionLoading = true;
     ensureProcessEnv("production");
-    if (!hasCustomEditor) config.editor = editorRequested;
+    if (localStatePreviewRequested) config.editor = false;
+    else if (!hasCustomEditor) config.editor = editorRequested;
     if (!hasCustomModelUrl) config.modelUrl = normalizedProductionBase + "models/merch_monk_website.glb";
     appendCss(productionCss);
 
     if (config.theatreState && !isValidTheatreState(config.theatreState)) {
       console.warn("[Merch Monk] Invalid inline Theatre state. Using URL or bundled fallback.");
       delete config.theatreState;
+    }
+
+    if (!config.stateSource) {
+      config.stateSource = config.theatreState
+        ? "inline"
+        : config.theatreStateUrl
+          ? undefined
+          : "bundled";
     }
 
     function startProductionModule() {
@@ -110,8 +177,10 @@
       .then(function (state) {
         if (!isValidTheatreState(state)) throw new Error("Invalid Theatre state JSON");
         config.theatreState = state;
+        config.stateSource = "external";
       })
       .catch(function (error) {
+        config.stateSource = "bundled-fallback";
         console.warn("[Merch Monk] Could not load external Theatre state. Using bundled fallback.", error);
       })
       .then(function () {
@@ -161,6 +230,12 @@
 
     config.runtimeSource = "local-loading";
     appendInlineModule(refreshPreamble);
+  }
+
+  localStatePreviewReady = prepareLocalStatePreview();
+
+  if (!localStatePreviewReady) {
+    return;
   }
 
   if (preferLocal) {

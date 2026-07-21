@@ -23,12 +23,14 @@ type MerchMonkWebflowConfig = {
   productionBaseUrl?: string;
   productionEntry?: string;
   productionCss?: string;
-  runtimeSource?: "local-loading" | "local" | "local-error" | "production";
+  runtimeSource?: "local-loading" | "local" | "local-error" | "local-state-error" | "production";
   productColor?: ProductCupColorKey;
   modelUrl?: string;
   theatreState?: __UNSTABLE_Project_OnDiskState;
   theatreStateUrl?: string;
   theatreStateTimeoutMs?: number;
+  stateSource?: "bundled" | "bundled-fallback" | "external" | "inline" | "local-preview" | "local-preview-error";
+  localStateSavedAt?: string;
   editor?: boolean;
   onReady?: (detail: MerchMonkReadyDetail) => void;
 };
@@ -79,6 +81,7 @@ function mountWebflowExperience() {
     };
     canvasHost.classList.add("is-ready");
     canvasHost.dataset.merchMonkReady = "true";
+    if (config.stateSource) canvasHost.dataset.merchMonkStateSource = config.stateSource;
     window.dispatchEvent(new CustomEvent("merch-monk:ready", { detail }));
     try {
       config.onReady?.(detail);
