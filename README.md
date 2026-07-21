@@ -118,7 +118,7 @@ https://merch-monk.webflow.io/?editor=true
 
 ### Preview the local Theatre state in production
 
-The Theatre controls include **Preview in production** next to the JSON export action. It captures the current Theatre project through Theatre's export API, stores a browser-local snapshot, and opens the same Webflow URL with:
+The Theatre **Utilities** pane includes **Preview** and **Export JSON** actions. The preview action captures the current Theatre project through Theatre's export API, stores a browser-local snapshot, and opens the same Webflow URL with:
 
 ```text
 ?mmState=local
@@ -255,12 +255,21 @@ The active production breakpoint is resolved from the host width:
 | Tablet | `700–1099px` | `Scroll Scene / tablet` |
 | Desktop | `>= 1100px` | `Scroll Scene` |
 
-Desktop is the base. In the `Scene Controls` panel:
+Desktop is the base. A dedicated device-icon switch in the Theatre toolbar selects Desktop, Tablet, or Mobile. A separate sliders icon toggles the optional **Utilities** pane.
 
-- `Copy from...` copies the object and its complete timeline from a selected source into the active breakpoint;
-- `Copy to...` sends the active object and its complete timeline to one selected breakpoint or to both other breakpoints;
+Keyframable values have a single editing surface:
+
+- use Theatre **Props** to edit the selected object's values, create keyframes at the playhead, and choose Screen Anchor presets directly below the native anchor values;
+- use Theatre **Sequence** to edit keyframe timing and interpolation;
+- open **Utilities** for cross-breakpoint timeline copies, global 3D Hover settings, preview, export, or closing the editor.
+
+Inside the optional `Utilities` pane:
+
+- the current selected object is shown above the copy controls;
+- the side-by-side `From` and `To` selectors copy the selected object and its complete timeline with one action;
 - each transfer reports its source and destination after the copy finishes;
-- the status compares normalized values and keyframes and displays `Base`, `Matches Desktop`, `Matches Tablet`, `Matches Mobile`, or `Custom`;
+- the 3D Hover controls remain global preview settings and are not part of the Theatre timeline;
+- preview, export, and close-editor actions share one compact footer;
 - `G`, `R`, and `S` switch between translate, rotate, and scale when a text field is not focused.
 
 If an older JSON file does not contain tablet or mobile, `prepareTheatreState()` clones the desktop sheet to fill the missing sheet. This keeps the scene working, but those breakpoints will not yet have their own direction.
@@ -270,7 +279,7 @@ If an older JSON file does not contain tablet or mobile, `prepareTheatreState()`
 Recommended workflow, without rebuilding the app:
 
 1. Open the page with `?editor=true` and make the adjustments.
-2. In `Scene Controls > Export`, click `Export minified JSON`.
+2. Open **Utilities** from the sliders icon in the Theatre toolbar and click `Export JSON`.
 3. Rename/version the downloaded file. The default name is `merch-monk-home_state.json`.
 4. Host the JSON in Webflow Assets or at another public URL with CORS.
 5. Update only `theatreStateUrl` in the Embed and publish Webflow.
@@ -290,7 +299,7 @@ The loader validates `definitionVersion` and `sheetsById`, uses `cache: "no-stor
 
 To update the fallback as well, replace `src/three/merch-monk-home.theatre-project-state.json` literally and rebuild the bundles.
 
-Editor preferences are stored in `localStorage` under `merch-monk-theatre-editor-settings`. If the editor opens with an unexpected selection, breakpoint, or slider values, remove this key and reload the page.
+Editor preferences are stored in `localStorage` under `merch-monk-theatre-editor-settings`. The optional utilities pane starts closed on every page load and is toggled from the sliders icon in the Theatre toolbar. If the editor opens with an unexpected selection, breakpoint, or slider values, remove the settings key and reload the page.
 
 ## Studio
 

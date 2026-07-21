@@ -486,6 +486,10 @@ function copyTheatreObjectTimelineState(
   return tracksToCopy.length > 0;
 }
 
+export async function getTheatreStudio() {
+  return loadStudio();
+}
+
 export async function showTheatreStudio(objectId: ObjectId, breakpoint: Breakpoint = "desktop") {
   const studio = await loadStudio();
   studio.ui.restore();
