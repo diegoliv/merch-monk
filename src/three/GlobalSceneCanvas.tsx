@@ -29,6 +29,7 @@ import { getTheatreObject, getTheatreObjects, theatreProject, type TheatreObject
 import { selectTheatreObject, setTheatreObjectValue } from "./theatreStudio";
 import { useSceneProgress } from "./useSceneProgress";
 import { useViewportInfo } from "./useViewportInfo";
+import { useSceneMotionInput, type SceneMotionInput } from "./useSceneMotionInput";
 import type { ProductCupColorValue, ProductCupDecorationMethod } from "../components/StorySections";
 import { useExperienceRuntime } from "../experienceRuntime";
 import { configureSceneRenderer, studioEnvironmentPreset, tuneMaterial } from "./sceneAppearance";
@@ -47,7 +48,6 @@ const backgroundChildDepthGap = 0.24;
 type TheatreValues = Record<ObjectId, TheatreObjectValue>;
 type BoxChildValues = Record<BoxChildObjectId, TheatreObjectValue>;
 type BackgroundChildValues = Record<BackgroundChildObjectId, TheatreObjectValue>;
-type PointerState = { clientX: number; clientY: number; active: boolean };
 type PerformanceDebug = {
   frames: number;
   totalFrameMs: number;
@@ -590,7 +590,7 @@ type MerchObjectProps = {
   theatreValuesRef: MutableRefObject<TheatreValues>;
   domPinsRef: MutableRefObject<DomPinMap>;
   activeViewportRef: MutableRefObject<ViewportInfo>;
-  pointerStateRef: MutableRefObject<PointerState>;
+  motionInputRef: MutableRefObject<SceneMotionInput>;
   lockMotion: boolean;
   selectedObjectId: ObjectId;
   editorEnabled: boolean;
@@ -608,7 +608,7 @@ type MerchObjectProps = {
   entranceStartRef: MutableRefObject<number | null>;
 };
 
-function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewportRef, pointerStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
+function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewportRef, motionInputRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
   const { scene, animations } = useGLTF(modelPath);
   const { camera, gl } = useThree();
   const groupRef = useRef<THREE.Group | null>(null);
@@ -935,19 +935,13 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
   useFrame(({ clock }) => {
     const state = appliedRef.current[id];
     if (!state) return;
-    const pointerState = pointerStateRef.current;
+    const motionInput = motionInputRef.current;
     const entranceStart = entranceStartRef.current;
     const entranceElapsed = entranceStart === null ? 0 : clock.elapsedTime - entranceStart - entranceIndex * entranceStagger;
     const entranceProgress = entranceEnabled
       ? THREE.MathUtils.clamp(entranceElapsed / entranceDuration, 0, 1)
       : 1;
     const entranceScale = 1 - Math.pow(1 - entranceProgress, 3);
-    const canvasBounds = gl.domElement.getBoundingClientRect();
-    pointerRef.current.set(
-      ((pointerState.clientX - canvasBounds.left) / Math.max(canvasBounds.width, 1)) * 2 - 1,
-      -((pointerState.clientY - canvasBounds.top) / Math.max(canvasBounds.height, 1)) * 2 + 1,
-    );
-
     if (id === "box" && mixerRef.current && boxActionRef.current && boxAnimationClip) {
       const progress = THREE.MathUtils.clamp(theatreValuesRef.current.box.boxAnimationProgress ?? 0, 0, 1);
       if (!Number.isFinite(lastAnimationProgressRef.current) || Math.abs(lastAnimationProgressRef.current - progress) > 0.0001) {
@@ -979,10 +973,20 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       state.opacity <= 0.08 ||
       !motionValue?.visible ||
       motionValue.opacity <= 0.08 ||
-      !pointerState.active
+      !motionInput.active
     ) {
       targetTiltRef.current.set(0, 0);
+    } else if (motionInput.source === "orientation") {
+      const orientationRange = 24 * Math.max(hoverRange, 0.25);
+      const horizontal = THREE.MathUtils.clamp(motionInput.orientationX / orientationRange, -1, 1);
+      const vertical = THREE.MathUtils.clamp(motionInput.orientationY / orientationRange, -1, 1);
+      targetTiltRef.current.set(-vertical * hoverTiltX, horizontal * hoverTiltY);
     } else {
+      const canvasBounds = gl.domElement.getBoundingClientRect();
+      pointerRef.current.set(
+        ((motionInput.clientX - canvasBounds.left) / Math.max(canvasBounds.width, 1)) * 2 - 1,
+        -((motionInput.clientY - canvasBounds.top) / Math.max(canvasBounds.height, 1)) * 2 + 1,
+      );
       groupRef.current.updateMatrixWorld(true);
       raycasterRef.current.setFromCamera(pointerRef.current, camera);
 
@@ -1059,7 +1063,9 @@ type SceneContentProps = {
   productCupColor: ProductCupColorValue;
   productCupArtworkUrl?: string | null;
   productCupDecorationMethod?: ProductCupDecorationMethod;
+  motionInputRef: MutableRefObject<SceneMotionInput>;
   onReady?: () => void;
+  viewport: ViewportInfo;
 };
 
 function SceneReadinessController({ entranceStartRef, onReady }: {
@@ -1097,11 +1103,10 @@ function SceneReadinessController({ entranceStartRef, onReady }: {
   return null;
 }
 
-function SceneContent({ productCupColor, productCupArtworkUrl = null, productCupDecorationMethod = "digital", onReady }: SceneContentProps) {
+function SceneContent({ productCupColor, productCupArtworkUrl = null, productCupDecorationMethod = "digital", motionInputRef, onReady, viewport }: SceneContentProps) {
   const performanceDebug = getPerformanceDebug();
   if (performanceDebug) performanceDebug.sceneRenders += 1;
   const runtime = useExperienceRuntime();
-  const viewport = useViewportInfo();
   const editor = useEditorStore();
   const runtimeBreakpointMode = editor.enabled ? editor.breakpointMode : "auto";
   const activeBreakpoint = resolveBreakpointMode(runtimeBreakpointMode, viewport.breakpoint);
@@ -1118,7 +1123,6 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
   const appliedRef = useRef<AppliedSceneState>(
     applyTheatreValues(theatreValuesRef.current, activeViewport),
   );
-  const pointerStateRef = useRef<PointerState>({ clientX: 0, clientY: 0, active: false });
   const entranceStartRef = useRef<number | null>(null);
   const entranceEnabled = runtime.mode === "webflow" && !editor.enabled;
 
@@ -1140,24 +1144,6 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
   useEffect(() => {
     appliedRef.current = applyTheatreValues(theatreValuesRef.current, activeViewport);
   }, [activeViewport]);
-
-  useEffect(() => {
-    function handlePointerMove(event: PointerEvent) {
-      pointerStateRef.current.clientX = event.clientX;
-      pointerStateRef.current.clientY = event.clientY;
-      pointerStateRef.current.active = true;
-    }
-    function handlePointerLeave() {
-      pointerStateRef.current.active = false;
-    }
-    window.addEventListener("pointermove", handlePointerMove, { passive: true });
-    window.addEventListener("pointerleave", handlePointerLeave);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerleave", handlePointerLeave);
-    };
-  }, []);
-
 
   function saveTransform() {
     if (!selectedObject) return;
@@ -1303,7 +1289,7 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
           theatreValuesRef={theatreValuesRef}
           domPinsRef={domPinsRef}
           activeViewportRef={activeViewportRef}
-          pointerStateRef={pointerStateRef}
+          motionInputRef={motionInputRef}
           lockMotion={editor.enabled && (
             editor.selectedObject === id ||
             (id === "box" && isBoxChildObjectId(editor.selectedObject)) ||
@@ -1342,27 +1328,33 @@ type GlobalSceneCanvasProps = {
 export function GlobalSceneCanvas({ productCupColor, productCupArtworkUrl = null, productCupDecorationMethod = "digital", onReady }: GlobalSceneCanvasProps) {
   const editor = useEditorStore();
   const runtime = useExperienceRuntime();
+  const viewport = useViewportInfo();
+  const { inputRef: motionInputRef } = useSceneMotionInput(viewport.breakpoint);
 
   return (
-    <div className={`scene-layer ${runtime.mode === "webflow" ? "is-webflow" : ""} ${editor.enabled ? "is-editing" : ""}`} aria-hidden="true">
-      <Canvas
-        gl={{ antialias: true, alpha: true }}
-        dpr={[1, 2]}
-        onCreated={({ gl, scene }) => {
-          configureSceneRenderer(gl, scene);
-        }}
-      >
-        {performanceDebugEnabled ? <PerformanceProbe /> : null}
-        <Suspense fallback={null}>
-          <SceneContent
-            productCupColor={productCupColor}
-            productCupArtworkUrl={productCupArtworkUrl}
-            productCupDecorationMethod={productCupDecorationMethod}
-            onReady={onReady}
-          />
-        </Suspense>
-      </Canvas>
-    </div>
+    <>
+      <div className={`scene-layer ${runtime.mode === "webflow" ? "is-webflow" : ""} ${editor.enabled ? "is-editing" : ""}`} aria-hidden="true">
+        <Canvas
+          gl={{ antialias: true, alpha: true }}
+          dpr={[1, 2]}
+          onCreated={({ gl, scene }) => {
+            configureSceneRenderer(gl, scene);
+          }}
+        >
+          {performanceDebugEnabled ? <PerformanceProbe /> : null}
+          <Suspense fallback={null}>
+            <SceneContent
+              productCupColor={productCupColor}
+              productCupArtworkUrl={productCupArtworkUrl}
+              productCupDecorationMethod={productCupDecorationMethod}
+              motionInputRef={motionInputRef}
+              onReady={onReady}
+              viewport={viewport}
+            />
+          </Suspense>
+        </Canvas>
+      </div>
+    </>
   );
 }
 
