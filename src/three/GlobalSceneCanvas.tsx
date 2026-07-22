@@ -1,9 +1,10 @@
-import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, OrthographicCamera, TransformControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
 import { resolveBreakpointMode } from "./breakpoints";
+import { BackgroundCollection } from "./BackgroundCollection";
 import { DomPinController, type DomPinMap } from "./DomPinController";
 import {
   applyBackgroundGridViewport,
@@ -12,16 +13,17 @@ import {
   crewneckGridDefaults,
   crewneckGridWorldToSettings,
   getCrewneckGridFollowWeight,
-  usesBackgroundGridLayout,
 } from "./backgroundGridLayout";
 import { anchorToWorld, applyViewport, percentOffsetToWorld, worldOffsetToPercent, worldScaleToPercent } from "./math";
 import {
   backgroundChildByParent,
+  backgroundCollectionId,
   backgroundChildObjectIds,
   backgroundObjectIds,
   backgroundParentByChild,
   boxChildObjectIds,
   objectIds,
+  pinnableObjectIds,
   renderObjectIds,
 } from "./sceneObjects";
 import { editorStore, useEditorStore } from "./editorStore";
@@ -38,12 +40,30 @@ import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, Bo
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
 const crewneckLogoPath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5527787af01c167ce42d3c_f488968c6e31020e99fcf5deeeb44ad6_crewneck-logo.avif";
 const boxTexturePath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5a88f85ff267f9a82727a8_box_body.avif";
+const boxTextureTargets = [
+  { nodeName: "box", materialName: null, recursive: false, overlay: false, path: boxTexturePath },
+  {
+    nodeName: "cup_box",
+    materialName: "cup_uv",
+    recursive: true,
+    overlay: true,
+    path: "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a613ce5aa236d5e3064fef2_bottle-logo.avif",
+  },
+  {
+    nodeName: "notebook_box",
+    materialName: "notebook_uv",
+    overlay: true,
+    recursive: true,
+    path: "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a613ce50330e513548c5356_notebook-logo.avif",
+  },
+] as const;
 const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones", product_cup: "cup" };
 const boxAnimationNames = new Set(["box_open"]);
 const entranceObjectIds: ObjectId[] = renderObjectIds.filter((id) => id !== "box" && id !== "product_cup");
 const entranceDuration = 0.55;
 const entranceStagger = 0.05;
 const backgroundChildDepthGap = 0.24;
+const backgroundCollectionNeutralScale = 10;
 
 type TheatreValues = Record<ObjectId, TheatreObjectValue>;
 type BoxChildValues = Record<BoxChildObjectId, TheatreObjectValue>;
@@ -277,27 +297,74 @@ type BoxTextureMaterialState = {
   material: THREE.MeshStandardMaterial;
   map: THREE.Texture | null;
   color: THREE.Color;
+  texture: THREE.Texture;
 };
 
-function applyBoxTexture(object: THREE.Object3D, texture: THREE.Texture) {
-  const box = object.getObjectByName("box");
-  if (!box || !("material" in box)) return [];
+function createBoxTextureOverlay(material: THREE.MeshStandardMaterial, source: THREE.Texture) {
+  const image = source.image as
+    | (CanvasImageSource & {
+        naturalHeight?: number;
+        naturalWidth?: number;
+        height?: number;
+        width?: number;
+      })
+    | undefined;
+  const width = image?.naturalWidth ?? image?.width ?? 0;
+  const height = image?.naturalHeight ?? image?.height ?? 0;
+  if (!image || !width || !height) return null;
 
-  const mesh = box as THREE.Mesh;
-  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-  return materials.flatMap((material): BoxTextureMaterialState[] => {
-    if (!(material instanceof THREE.MeshStandardMaterial)) return [];
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
 
-    const state = {
-      material,
-      map: material.map,
-      color: material.color.clone(),
-    };
-    material.map = texture;
-    material.color.set("#ffffff");
-    material.needsUpdate = true;
-    return [state];
+  context.fillStyle = material.color.getStyle();
+  context.fillRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = false;
+  texture.anisotropy = source.anisotropy;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function applyBoxTexture(
+  object: THREE.Object3D,
+  nodeName: string,
+  materialName: string | null,
+  recursive: boolean,
+  overlay: boolean,
+  texture: THREE.Texture,
+) {
+  const target = object.getObjectByName(nodeName);
+  if (!target) return [];
+
+  const states: BoxTextureMaterialState[] = [];
+  target.traverse((child) => {
+    if (!recursive && child !== target) return;
+    if (!("material" in child)) return;
+    const mesh = child as THREE.Mesh;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    materials.forEach((material) => {
+      if (!(material instanceof THREE.MeshStandardMaterial)) return;
+      if (materialName && material.name !== materialName) return;
+      const appliedTexture = overlay ? createBoxTextureOverlay(material, texture) : texture;
+      if (!appliedTexture) return;
+      states.push({
+        material,
+        map: material.map,
+        color: material.color.clone(),
+        texture: appliedTexture,
+      });
+      material.map = appliedTexture;
+      material.color.set("#ffffff");
+      material.needsUpdate = true;
+    });
   });
+  return states;
 }
 
 function setOpacity(materials: THREE.Material[], opacity: number) {
@@ -534,7 +601,11 @@ function initialTheatreValues(breakpoint: Breakpoint): TheatreValues {
 
 function applyTheatreViewport(id: ObjectId, value: TheatreObjectValue, viewport: ViewportInfo) {
   const state = valueToSceneState(value);
-  if (isBackgroundObjectId(id) && usesBackgroundGridLayout(state, viewport)) {
+  if (id === backgroundCollectionId) {
+    const applied = applyViewport(state, viewport);
+    return { ...applied, scale: state.scale / backgroundCollectionNeutralScale };
+  }
+  if (isBackgroundObjectId(id)) {
     return applyBackgroundGridViewport(id, state, viewport);
   }
   return applyViewport(state, viewport);
@@ -590,6 +661,7 @@ type MerchObjectProps = {
   theatreValuesRef: MutableRefObject<TheatreValues>;
   domPinsRef: MutableRefObject<DomPinMap>;
   activeViewportRef: MutableRefObject<ViewportInfo>;
+  backgroundCollectionRef: MutableRefObject<THREE.Group | null>;
   motionInputRef: MutableRefObject<SceneMotionInput>;
   lockMotion: boolean;
   selectedObjectId: ObjectId;
@@ -601,18 +673,24 @@ type MerchObjectProps = {
   productCupColor: ProductCupColorValue;
   productCupArtworkUrl: string | null;
   productCupDecorationMethod: ProductCupDecorationMethod;
-  setSelectedRef: (instance: THREE.Object3D | null) => void;
+  setSelectedRef: (id: ObjectId, instance: THREE.Object3D | null) => void;
   activeBreakpoint: Breakpoint;
   entranceEnabled: boolean;
   entranceIndex: number;
   entranceStartRef: MutableRefObject<number | null>;
 };
 
-function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewportRef, motionInputRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
+function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewportRef, backgroundCollectionRef, motionInputRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
   const { scene, animations } = useGLTF(modelPath);
   const { camera, gl } = useThree();
   const groupRef = useRef<THREE.Group | null>(null);
   const pointerRef = useRef(new THREE.Vector2());
+  const pinTargetRef = useRef(new THREE.Vector3());
+  const collectionLocalTargetRef = useRef(new THREE.Vector3());
+  const collectionWorldTargetRef = useRef(new THREE.Vector3());
+  const collectionWorldScaleRef = useRef(new THREE.Vector3());
+  const collectionWorldQuaternionRef = useRef(new THREE.Quaternion());
+  const collectionFollowQuaternionRef = useRef(new THREE.Quaternion());
   const raycasterRef = useRef(new THREE.Raycaster());
   const tiltRef = useRef(new THREE.Vector2());
   const targetTiltRef = useRef(new THREE.Vector2());
@@ -732,39 +810,53 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     if (id !== "box" || !object) return;
 
     let cancelled = false;
-    let texture: THREE.Texture | null = null;
-    let materialStates: BoxTextureMaterialState[] = [];
+    const materialStates: BoxTextureMaterialState[] = [];
+    const textures = new Set<THREE.Texture>();
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin("anonymous");
-    loader.load(
-      boxTexturePath,
-      (loadedTexture) => {
-        if (cancelled) {
-          loadedTexture.dispose();
-          return;
-        }
-        loadedTexture.colorSpace = THREE.SRGBColorSpace;
-        loadedTexture.flipY = false;
-        loadedTexture.anisotropy = gl.capabilities.getMaxAnisotropy();
-        loadedTexture.needsUpdate = true;
-        texture = loadedTexture;
-        materialStates = applyBoxTexture(object, loadedTexture);
-      },
-      undefined,
-      () => {
-        if (!cancelled) console.warn("[Merch Monk] Could not load box texture: " + boxTexturePath);
-      },
-    );
+    boxTextureTargets.forEach((target) => {
+      loader.load(
+        target.path,
+        (loadedTexture) => {
+          if (cancelled) {
+            loadedTexture.dispose();
+            return;
+          }
+          loadedTexture.colorSpace = THREE.SRGBColorSpace;
+          loadedTexture.flipY = false;
+          loadedTexture.anisotropy = gl.capabilities.getMaxAnisotropy();
+          loadedTexture.needsUpdate = true;
+          textures.add(loadedTexture);
+          const appliedStates = applyBoxTexture(
+            object,
+            target.nodeName,
+            target.materialName,
+            target.recursive,
+            target.overlay,
+            loadedTexture,
+          );
+          if (appliedStates.length === 0) {
+            console.warn(`[Merch Monk] Could not find texture target: ${target.nodeName}/${target.materialName ?? "material"}`);
+          }
+          appliedStates.forEach((state) => textures.add(state.texture));
+          materialStates.push(...appliedStates);
+        },
+        undefined,
+        () => {
+          if (!cancelled) console.warn("[Merch Monk] Could not load box texture: " + target.path);
+        },
+      );
+    });
 
     return () => {
       cancelled = true;
-      materialStates.forEach(({ material, map, color }) => {
+      materialStates.forEach(({ material, map, color, texture }) => {
         if (material.map !== texture) return;
         material.map = map;
         material.color.copy(color);
         material.needsUpdate = true;
       });
-      texture?.dispose();
+      textures.forEach((texture) => texture.dispose());
     };
   }, [gl, id, object]);
   useEffect(() => {
@@ -814,12 +906,17 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
   }, [id, object, productCupArtworkUrl, productCupColor, productCupDecorationMethod]);
 
   function applyState(tilt = tiltRef.current, entranceScale = 1) {
-    if (!groupRef.current) return;
+    const group = groupRef.current;
+    if (!group) return;
     const state = appliedRef.current[id];
     if (!state) return;
+
     const isBackground = isBackgroundObjectId(id);
     let worldX = state.worldPosition[0];
     let worldY = state.worldPosition[1];
+    let worldZ = state.worldPosition[2];
+    let worldScale = state.scale;
+    let collectionFollow = 0;
     const domPin = domPinsRef.current[id];
     if (domPin?.active) {
       const value = theatreValuesRef.current[id];
@@ -828,22 +925,73 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
         value.position.y,
         0,
       ], activeViewportRef.current);
-      worldX = domPin.worldPosition[0] + offset[0];
-      worldY = domPin.worldPosition[1] + offset[1];
+      const pinTarget = pinTargetRef.current.set(
+        domPin.worldPosition[0] + offset[0],
+        domPin.worldPosition[1] + offset[1],
+        state.worldPosition[2],
+      );
+      const parent = group.parent;
+      if (parent) {
+        parent.updateWorldMatrix(true, false);
+        parent.worldToLocal(pinTarget);
+      }
+      worldX = pinTarget.x;
+      worldY = pinTarget.y;
+      worldZ = pinTarget.z;
     }
-    groupRef.current.position.set(
-      worldX,
-      worldY,
-      state.worldPosition[2],
-    );
+
+    if (id === "crewneck" && backgroundCollectionRef.current) {
+      const backgroundState = appliedRef.current.bg_crewneck;
+      const backgroundValue = theatreValuesRef.current.bg_crewneck;
+      const collectionState = appliedRef.current[backgroundCollectionId];
+      const grid = theatreValuesRef.current.crewneck.grid ?? crewneckGridDefaults;
+      const collectionPresence = collectionState.visible ? collectionState.opacity : 0;
+      collectionFollow = getCrewneckGridFollowWeight(
+        valueToSceneState(backgroundValue),
+        grid,
+        activeViewportRef.current,
+      ) * collectionPresence;
+
+      if (collectionFollow > 0.0001) {
+        const localTarget = collectionLocalTargetRef.current.set(
+          backgroundState.worldPosition[0] + (grid.offset.x / 100) * backgroundState.scale,
+          backgroundState.worldPosition[1] - (grid.offset.y / 100) * backgroundState.scale,
+          state.worldPosition[2],
+        );
+        const collection = backgroundCollectionRef.current;
+        collection.updateWorldMatrix(true, false);
+        const worldTarget = collectionWorldTargetRef.current.copy(localTarget).applyMatrix4(collection.matrixWorld);
+        if (domPin?.active) {
+          worldX += (worldTarget.x - worldX) * collectionFollow;
+          worldY += (worldTarget.y - worldY) * collectionFollow;
+        } else {
+          worldX += (worldTarget.x - localTarget.x) * collectionFollow;
+          worldY += (worldTarget.y - localTarget.y) * collectionFollow;
+        }
+
+        collection.getWorldScale(collectionWorldScaleRef.current);
+        const gridTargetScale = backgroundState.scale * (grid.scale / 100);
+        worldScale += gridTargetScale * (collectionWorldScaleRef.current.x - 1) * collectionFollow;
+
+        collection.getWorldQuaternion(collectionWorldQuaternionRef.current);
+        collectionFollowQuaternionRef.current
+          .identity()
+          .slerp(collectionWorldQuaternionRef.current, collectionFollow);
+      }
+    }
+
+    group.position.set(worldX, worldY, worldZ);
     baseEulerRef.current.set(state.rotation[0], state.rotation[1], state.rotation[2], "XYZ");
     baseQuaternionRef.current.setFromEuler(baseEulerRef.current);
     globalTiltEulerRef.current.set(tilt.x, tilt.y, 0, "XYZ");
     globalTiltQuaternionRef.current.setFromEuler(globalTiltEulerRef.current);
-    groupRef.current.quaternion.copy(baseQuaternionRef.current);
-    if (!isBackground) groupRef.current.quaternion.premultiply(globalTiltQuaternionRef.current);
-    groupRef.current.scale.setScalar(state.scale * entranceScale);
-    groupRef.current.visible = state.visible && state.opacity > 0.01;
+    group.quaternion.copy(baseQuaternionRef.current);
+    if (!isBackground) group.quaternion.premultiply(globalTiltQuaternionRef.current);
+    if (collectionFollow > 0.0001) {
+      group.quaternion.premultiply(collectionFollowQuaternionRef.current);
+    }
+    group.scale.setScalar(worldScale * entranceScale);
+    group.visible = state.visible && state.opacity > 0.01;
     if (object) {
       if (!Number.isFinite(lastOpacityRef.current) || Math.abs(lastOpacityRef.current - state.opacity) > 0.0001) {
         setOpacity(materials, state.opacity);
@@ -890,7 +1038,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
 
   useEffect(() => {
     if (id === "box" && isBoxChildObjectId(selectedObjectId) && object) {
-      setSelectedRef(object.getObjectByName(selectedObjectId) ?? null);
+      setSelectedRef(selectedObjectId, object.getObjectByName(selectedObjectId) ?? null);
       return;
     }
 
@@ -899,12 +1047,12 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       backgroundParentByChild[selectedObjectId] === id &&
       object
     ) {
-      setSelectedRef(object.getObjectByName(selectedObjectId) ?? null);
+      setSelectedRef(selectedObjectId, object.getObjectByName(selectedObjectId) ?? null);
       return;
     }
 
     if (selectedObjectId === id && groupRef.current) {
-      setSelectedRef(groupRef.current);
+      setSelectedRef(id, groupRef.current);
     }
   }, [id, object, selectedObjectId, setSelectedRef]);
   useEffect(() => {
@@ -1020,7 +1168,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     <group
       ref={(instance) => {
         groupRef.current = instance;
-        if (selectedObjectId === id) setSelectedRef(instance);
+        if (selectedObjectId === id) setSelectedRef(id, instance);
       }}
       onPointerDown={(event) => {
         if (!editorEnabled) return;
@@ -1030,7 +1178,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
         while (id === "box" && object && clicked) {
           if (isBoxChildObjectId(clicked.name as ObjectId)) {
             editorStore.setSelection({ selectedObject: clicked.name as BoxChildObjectId });
-            setSelectedRef(clicked);
+            setSelectedRef(clicked.name as BoxChildObjectId, clicked);
             void selectTheatreObject(clicked.name as BoxChildObjectId, activeBreakpoint);
             return;
           }
@@ -1042,7 +1190,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
         while (backgroundChildId && object && clicked) {
           if (clicked.name === backgroundChildId) {
             editorStore.setSelection({ selectedObject: backgroundChildId });
-            setSelectedRef(clicked);
+            setSelectedRef(backgroundChildId, clicked);
             void selectTheatreObject(backgroundChildId, activeBreakpoint);
             return;
           }
@@ -1117,8 +1265,20 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
   const activeViewportRef = useRef(activeViewport);
   activeViewportRef.current = activeViewport;
   const domPinsRef = useRef<DomPinMap>({});
+  const backgroundCollectionRef = useRef<THREE.Group | null>(null);
   useSceneProgress(activeBreakpoint);
-  const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
+  const [selectedTransformTarget, setSelectedTransformTarget] = useState<{
+    id: ObjectId;
+    object: THREE.Object3D;
+  } | null>(null);
+  const setSelectedRef = useCallback((id: ObjectId, instance: THREE.Object3D | null) => {
+    if (!instance) return;
+    setSelectedTransformTarget((current) => (
+      current?.id === id && current.object === instance
+        ? current
+        : { id, object: instance }
+    ));
+  }, []);
   const theatreValuesRef = useRef<TheatreValues>(initialTheatreValues(activeBreakpoint));
   const appliedRef = useRef<AppliedSceneState>(
     applyTheatreValues(theatreValuesRef.current, activeViewport),
@@ -1146,7 +1306,8 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
   }, [activeViewport]);
 
   function saveTransform() {
-    if (!selectedObject) return;
+    if (!selectedTransformTarget || selectedTransformTarget.id !== editor.selectedObject) return;
+    const selectedObject = selectedTransformTarget.object;
 
     const object = getTheatreObject(editor.selectedObject, activeBreakpoint);
     const current = object.value as TheatreObjectValue;
@@ -1223,7 +1384,7 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
       }
     }
 
-    if (isBackgroundObjectId(editor.selectedObject) && usesBackgroundGridLayout(currentState, activeViewport)) {
+    if (isBackgroundObjectId(editor.selectedObject)) {
       const next = backgroundGridWorldToTheatre(
         editor.selectedObject,
         selectedObject.position.toArray() as Vec3,
@@ -1264,6 +1425,41 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
     void setTheatreObjectValue(editor.selectedObject, next, activeBreakpoint);
   }
 
+  function renderMerchObject(id: ObjectId) {
+    return (
+      <MerchObject
+        key={id}
+        id={id}
+        appliedRef={appliedRef}
+        theatreValuesRef={theatreValuesRef}
+        domPinsRef={domPinsRef}
+        activeViewportRef={activeViewportRef}
+        backgroundCollectionRef={backgroundCollectionRef}
+        motionInputRef={motionInputRef}
+        lockMotion={editor.enabled && (
+          editor.selectedObject === id ||
+          (editor.selectedObject === backgroundCollectionId && isBackgroundObjectId(id)) ||
+          (id === "box" && isBoxChildObjectId(editor.selectedObject)) ||
+          (isBackgroundChildObjectId(editor.selectedObject) && backgroundParentByChild[editor.selectedObject] === id)
+        )}
+        selectedObjectId={editor.selectedObject}
+        editorEnabled={editor.enabled}
+        hoverTiltX={editor.hoverTiltX}
+        hoverTiltY={editor.hoverTiltY}
+        hoverFollow={editor.hoverFollow}
+        hoverRange={editor.hoverRange}
+        productCupColor={productCupColor}
+        productCupArtworkUrl={productCupArtworkUrl}
+        productCupDecorationMethod={productCupDecorationMethod}
+        setSelectedRef={setSelectedRef}
+        activeBreakpoint={activeBreakpoint}
+        entranceEnabled={entranceEnabled && entranceObjectIds.includes(id)}
+        entranceIndex={Math.max(0, entranceObjectIds.indexOf(id))}
+        entranceStartRef={entranceStartRef}
+      />
+    );
+  }
+
   return (
     <>
       <DomPinController
@@ -1281,38 +1477,19 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
         far={100}
       />
       <Environment preset={studioEnvironmentPreset} background={false} />
-      {renderObjectIds.map((id) => (
-        <MerchObject
-          key={id}
-          id={id}
-          appliedRef={appliedRef}
-          theatreValuesRef={theatreValuesRef}
-          domPinsRef={domPinsRef}
-          activeViewportRef={activeViewportRef}
-          motionInputRef={motionInputRef}
-          lockMotion={editor.enabled && (
-            editor.selectedObject === id ||
-            (id === "box" && isBoxChildObjectId(editor.selectedObject)) ||
-            (isBackgroundChildObjectId(editor.selectedObject) && backgroundParentByChild[editor.selectedObject] === id)
-          )}
-          selectedObjectId={editor.selectedObject}
-          editorEnabled={editor.enabled}
-          hoverTiltX={editor.hoverTiltX}
-          hoverTiltY={editor.hoverTiltY}
-          hoverFollow={editor.hoverFollow}
-          hoverRange={editor.hoverRange}
-          productCupColor={productCupColor}
-          productCupArtworkUrl={productCupArtworkUrl}
-          productCupDecorationMethod={productCupDecorationMethod}
-          setSelectedRef={setSelectedObject}
-          activeBreakpoint={activeBreakpoint}
-          entranceEnabled={entranceEnabled && entranceObjectIds.includes(id)}
-          entranceIndex={Math.max(0, entranceObjectIds.indexOf(id))}
-          entranceStartRef={entranceStartRef}
-        />
-      ))}
-      {editor.enabled && selectedObject && (renderObjectIds.includes(editor.selectedObject) || isBoxChildObjectId(editor.selectedObject) || isBackgroundChildObjectId(editor.selectedObject)) ? (
-        <TransformControls object={selectedObject} mode={editor.mode} size={0.8} onObjectChange={saveTransform} />
+      {renderObjectIds.filter((id) => !isBackgroundObjectId(id)).map(renderMerchObject)}
+      <BackgroundCollection
+        activeViewportRef={activeViewportRef}
+        appliedRef={appliedRef}
+        collectionRef={backgroundCollectionRef}
+        domPinsRef={domPinsRef}
+        selectedObjectId={editor.selectedObject}
+        setSelectedRef={setSelectedRef}
+      >
+        {backgroundObjectIds.map(renderMerchObject)}
+      </BackgroundCollection>
+      {editor.enabled && selectedTransformTarget?.id === editor.selectedObject && (pinnableObjectIds.includes(editor.selectedObject) || isBoxChildObjectId(editor.selectedObject) || isBackgroundChildObjectId(editor.selectedObject)) ? (
+        <TransformControls object={selectedTransformTarget.object} mode={editor.mode} size={0.8} onObjectChange={saveTransform} />
       ) : null}
     </>
   );

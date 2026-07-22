@@ -168,11 +168,11 @@ Each section occupies one unit of the Theatre sequence. Scroll binding is declar
 | Pricing/Confidence | `pricing` | `4 -> 5` |
 | Minutes | `minutes` | `5 -> 6` |
 
-`data-scene-breakpoint` may be `desktop`, `tablet`, or `mobile`. An element without `data-scene-breakpoint` is the desktop/base binding. The runtime first looks for the active breakpoint and then falls back to the base binding.
+`data-scene-breakpoint` accepts one or more comma-separated values: `desktop`, `tablet`, or `mobile`. An element without `data-scene-breakpoint` is the desktop/base binding. The runtime first looks for an entry containing the active breakpoint and then falls back to the base binding.
 
 ```html
 <section data-scene="pricing">
-  <div data-scene="pricing" data-scene-breakpoint="mobile"></div>
+  <div data-scene="pricing" data-scene-breakpoint="tablet, mobile"></div>
 </section>
 ```
 
@@ -180,13 +180,17 @@ For each resolved element, ScrollTrigger uses `start: "top top"`, `end: "bottom 
 
 ### DOM-pinned 3D objects
 
-A top-level 3D object can use an HTML element as its responsive X/Y anchor:
+A top-level 3D object or the `bg_collection` null can use an HTML element as its responsive X/Y anchor:
 
 ```html
 <div data-3d-pin="product_cup" data-3d-pin-breakpoint="mobile"></div>
+
+<div data-3d-pin="bg_collection"></div>
 ```
 
 The pin follows the same breakpoint override rules as scene triggers. While a pin is active, the HTML element center supplies the base X/Y position; Theatre `position.x` and `position.y` remain local offsets. Theatre continues to control Z, rotation, scale, opacity, visibility, materials, and authored object animation.
+
+All `bg_*` objects are Three.js children of `bg_collection` and appear under `bg_collection / ...` in Theatre Studio. Animate or pin `bg_collection` to move the full background grid while preserving each object's local layout and animation.
 
 ## Cup configurator controls
 

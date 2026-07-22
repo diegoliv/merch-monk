@@ -1,6 +1,6 @@
 import type { __UNSTABLE_Project_OnDiskState } from "@theatre/core";
 import { cloneTheatreObjectValue, getTheatreObject, getTheatreSheet, theatreProjectId, type TheatreObjectValue } from "./theatreProject";
-import { backgroundChildByParent } from "./sceneObjects";
+import { backgroundChildByParent, backgroundCollectionId } from "./sceneObjects";
 import type { Breakpoint, ObjectId } from "./types";
 
 type Studio = typeof import("@theatre/studio").default;
@@ -73,7 +73,7 @@ type TheatrePreviewSnapshot = {
 };
 
 const theatreOutlineStyleId = "merch-monk-theatre-outline-style";
-const theatreChildFolderNames = new Set(["box", ...Object.keys(backgroundChildByParent)]);
+const theatreChildFolderNames = new Set(["box", backgroundCollectionId, ...Object.keys(backgroundChildByParent)]);
 let theatreOutlineRoot: ShadowRoot | null = null;
 let theatreOutlineObserver: MutationObserver | null = null;
 let theatreOutlineElement: HTMLElement | null = null;

@@ -1,4 +1,6 @@
-import type { BackgroundChildObjectId, BackgroundObjectId, BoxChildObjectId, ObjectId } from "./types";
+import type { BackgroundChildObjectId, BackgroundObjectId, BoxChildObjectId, NullObjectId, ObjectId } from "./types";
+
+export const backgroundCollectionId: NullObjectId = "bg_collection";
 
 export const boxChildObjectIds: BoxChildObjectId[] = ["cap_box", "cup_box", "notebook_box"];
 
@@ -48,16 +50,22 @@ export const renderObjectIds: ObjectId[] = [
   ...backgroundObjectIds,
 ];
 
-export const objectIds: ObjectId[] = renderObjectIds.flatMap((id): ObjectId[] => {
-  if (id === "box") return [id, ...boxChildObjectIds];
-  if (backgroundObjectIds.includes(id as BackgroundObjectId)) {
-    const childId = backgroundChildByParent[id as BackgroundObjectId];
-    return childId ? [id, childId] : [id];
-  }
-  return [id];
-});
+export const pinnableObjectIds: ObjectId[] = [backgroundCollectionId, ...renderObjectIds];
+
+export const objectIds: ObjectId[] = [
+  backgroundCollectionId,
+  ...renderObjectIds.flatMap((id): ObjectId[] => {
+    if (id === "box") return [id, ...boxChildObjectIds];
+    if (backgroundObjectIds.includes(id as BackgroundObjectId)) {
+      const childId = backgroundChildByParent[id as BackgroundObjectId];
+      return childId ? [id, childId] : [id];
+    }
+    return [id];
+  }),
+];
 
 export const objectLabels: Record<ObjectId, string> = {
+  bg_collection: "Background collection",
   "tote": "Tote",
   cup: "Cup",
   umbrela_open: "Umbrella open",

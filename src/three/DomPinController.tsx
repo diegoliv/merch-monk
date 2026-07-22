@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { resolveResponsiveDataElement } from "./domBindings";
-import { renderObjectIds } from "./sceneObjects";
+import { pinnableObjectIds } from "./sceneObjects";
 import type { Breakpoint, ObjectId, Vec3, ViewportInfo } from "./types";
 
 export type DomPinState = {
@@ -33,7 +33,7 @@ export function DomPinController({ root, breakpoint, viewport, pinsRef }: DomPin
       const previous = pinsRef.current;
       const next: DomPinMap = {};
 
-      renderObjectIds.forEach((id) => {
+      pinnableObjectIds.forEach((id) => {
         const element = resolveResponsiveDataElement({
           root,
           valueAttribute: "data-3d-pin",
@@ -90,7 +90,7 @@ export function DomPinController({ root, breakpoint, viewport, pinsRef }: DomPin
     const canvasRect = gl.domElement.getBoundingClientRect();
     if (canvasRect.width <= 0 || canvasRect.height <= 0) return;
 
-    renderObjectIds.forEach((id) => {
+    pinnableObjectIds.forEach((id) => {
       const pin = pinsRef.current[id];
       if (!pin) return;
 

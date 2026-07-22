@@ -7,11 +7,6 @@ import type {
   ViewportInfo,
 } from "./types";
 
-type BackgroundGridSlot = {
-  column: number;
-  row: number;
-  theatrePosition: [number, number];
-};
 
 export type CrewneckGridSettings = {
   follow: number;
@@ -33,49 +28,13 @@ export type BackgroundGridLayout = {
 
 const backgroundGridFullScale: Record<Breakpoint, number> = {
   desktop: 28,
-  tablet: 25,
-  mobile: 30,
+  tablet: 10,
+  mobile: 10,
 };
-const backgroundResponsiveFullScale = 10;
 export const crewneckGridDefaults: CrewneckGridSettings = {
   follow: 1,
   offset: { x: 0, y: 0 },
   scale: 79.57211668135525,
-};
-const backgroundGridSlots: Record<Breakpoint, Record<BackgroundObjectId, BackgroundGridSlot>> = {
-  desktop: {
-    bg_cap: { column: 0, row: 0, theatrePosition: [-37, -30] },
-    bg_umbrela: { column: 1, row: 0, theatrePosition: [-22.5, -30] },
-    bg_tote: { column: 2, row: 0, theatrePosition: [-8, -30] },
-    bg_crewneck: { column: 0, row: 1, theatrePosition: [-37, 0] },
-    bg_notebook_2: { column: 1, row: 1, theatrePosition: [-22.5, 0] },
-    bg_cup: { column: 2, row: 1, theatrePosition: [-8, 0] },
-    bg_sweatpants: { column: 0, row: 2, theatrePosition: [-37, 30] },
-    "bg_flip-flop": { column: 1, row: 2, theatrePosition: [-22.5, 30] },
-    bg_notebook: { column: 2, row: 2, theatrePosition: [-8, 30] },
-  },
-  tablet: {
-    bg_tote: { column: 0, row: 0, theatrePosition: [-42, -25] },
-    bg_umbrela: { column: 1, row: 0, theatrePosition: [-14, -25] },
-    bg_cap: { column: 2, row: 0, theatrePosition: [14, -25] },
-    bg_cup: { column: 3, row: 0, theatrePosition: [42, -25] },
-    "bg_flip-flop": { column: 0, row: 1, theatrePosition: [-42, 0] },
-    bg_sweatpants: { column: 1, row: 1, theatrePosition: [-14, 0] },
-    bg_crewneck: { column: 2, row: 1, theatrePosition: [14, 0] },
-    bg_notebook: { column: 3, row: 1, theatrePosition: [42, 0] },
-    bg_notebook_2: { column: 1.5, row: 1, theatrePosition: [0, 0] },
-  },
-  mobile: {
-    bg_tote: { column: 0, row: 0, theatrePosition: [-33, -30] },
-    bg_umbrela: { column: 1, row: 0, theatrePosition: [0, -30] },
-    bg_cap: { column: 2, row: 0, theatrePosition: [33, -30] },
-    bg_cup: { column: 0, row: 1, theatrePosition: [-33, -15] },
-    bg_crewneck: { column: 1, row: 1, theatrePosition: [0, -15] },
-    bg_notebook_2: { column: 2, row: 1, theatrePosition: [33, -15] },
-    "bg_flip-flop": { column: 0, row: 2, theatrePosition: [-33, 0] },
-    bg_notebook: { column: 1, row: 2, theatrePosition: [0, 0] },
-    bg_sweatpants: { column: 2, row: 2, theatrePosition: [33, 0] },
-  },
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -87,8 +46,8 @@ export function getBackgroundGridLayout(
   height: number,
   breakpoint: Breakpoint = "desktop",
 ): BackgroundGridLayout {
-  const columns = breakpoint === "tablet" ? 4 : 3;
-  const rows = breakpoint === "tablet" ? 2 : 3;
+  const columns = 3;
+  const rows = 3;
   const isDesktop = breakpoint === "desktop";
   const edge = isDesktop
     ? clamp(width * 0.02, 24, 40)
@@ -120,73 +79,48 @@ export function getBackgroundGridLayout(
   };
 }
 
-export function usesBackgroundGridLayout(state: SceneObjectState, viewport: ViewportInfo) {
-  if (viewport.breakpoint !== "desktop") return true;
-
-  return (
-    Math.abs(state.anchor[0] - 100) < 0.001 &&
-    Math.abs(state.anchor[1] - 50) < 0.001
-  );
-}
-
-function getBackgroundGridSlotWorld(
-  id: BackgroundObjectId,
-  viewport: ViewportInfo,
-  layout = getBackgroundGridLayout(viewport.width, viewport.height, viewport.breakpoint),
-) {
-  const slot = backgroundGridSlots[viewport.breakpoint][id];
-  const centerX = layout.left + layout.cellSize / 2 + slot.column * (layout.cellSize + layout.gap);
-  const centerY = layout.top + layout.cellSize / 2 + slot.row * (layout.cellSize + layout.gap);
-
-  return {
-    layout,
-    slot,
-    worldPosition: [
-      (centerX / viewport.width - 0.5) * viewport.worldWidth,
-      (0.5 - centerY / viewport.height) * viewport.worldHeight,
-      0,
-    ] as Vec3,
-    worldScale: (layout.cellSize / viewport.height) * viewport.worldHeight,
-  };
-}
 
 export function applyBackgroundGridViewport(
-  id: BackgroundObjectId,
+  _id: BackgroundObjectId,
   state: SceneObjectState,
   viewport: ViewportInfo,
 ): AppliedObjectState {
-  const { slot, worldPosition, worldScale } = getBackgroundGridSlotWorld(id, viewport);
-  const offsetX = ((state.position[0] - slot.theatrePosition[0]) / 100) * viewport.worldWidth;
-  const offsetY = -((state.position[1] - slot.theatrePosition[1]) / 100) * viewport.worldHeight;
+  const layout = getBackgroundGridLayout(viewport.width, viewport.height, viewport.breakpoint);
+  const worldUnit = Math.min(viewport.worldWidth, viewport.worldHeight) / 100;
+  const fullScale = (layout.cellSize / viewport.height) * viewport.worldHeight;
 
   return {
     position: state.position,
     rotation: state.rotation,
-    scale: worldScale * (state.scale / backgroundGridFullScale[viewport.breakpoint]),
+    scale: fullScale * (state.scale / backgroundGridFullScale[viewport.breakpoint]),
     opacity: state.opacity,
     visible: state.visible,
-    worldPosition: [worldPosition[0] + offsetX, worldPosition[1] + offsetY, state.position[2]],
+    worldPosition: [
+      state.position[0] * worldUnit,
+      -state.position[1] * worldUnit,
+      state.position[2],
+    ],
   };
 }
 
 export function backgroundGridWorldToTheatre(
-  id: BackgroundObjectId,
+  _id: BackgroundObjectId,
   worldPosition: Vec3,
   worldScale: number,
   viewport: ViewportInfo,
 ) {
-  const { slot, worldPosition: slotWorldPosition, worldScale: slotWorldScale } = getBackgroundGridSlotWorld(id, viewport);
-  const offsetX = ((worldPosition[0] - slotWorldPosition[0]) / viewport.worldWidth) * 100;
-  const offsetY = -((worldPosition[1] - slotWorldPosition[1]) / viewport.worldHeight) * 100;
+  const layout = getBackgroundGridLayout(viewport.width, viewport.height, viewport.breakpoint);
+  const worldUnit = Math.min(viewport.worldWidth, viewport.worldHeight) / 100;
+  const fullScale = (layout.cellSize / viewport.height) * viewport.worldHeight;
 
   return {
     position: {
-      x: slot.theatrePosition[0] + offsetX,
-      y: slot.theatrePosition[1] + offsetY,
+      x: worldUnit > 0 ? worldPosition[0] / worldUnit : 0,
+      y: worldUnit > 0 ? -worldPosition[1] / worldUnit : 0,
       z: worldPosition[2],
     },
-    scale: slotWorldScale > 0
-      ? (worldScale / slotWorldScale) * backgroundGridFullScale[viewport.breakpoint]
+    scale: fullScale > 0
+      ? (worldScale / fullScale) * backgroundGridFullScale[viewport.breakpoint]
       : backgroundGridFullScale[viewport.breakpoint],
   };
 }
@@ -198,9 +132,7 @@ export function getCrewneckGridFollowWeight(
 ) {
   if (!backgroundState.visible) return 0;
 
-  const fullScale = usesBackgroundGridLayout(backgroundState, viewport)
-    ? backgroundGridFullScale[viewport.breakpoint]
-    : backgroundResponsiveFullScale;
+  const fullScale = backgroundGridFullScale[viewport.breakpoint];
   const presence = clamp(backgroundState.scale / fullScale, 0, 1);
   const easedPresence = presence * presence * (3 - 2 * presence);
   return clamp(settings.follow, 0, 1) * easedPresence * clamp(backgroundState.opacity, 0, 1);

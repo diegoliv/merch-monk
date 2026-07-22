@@ -1,5 +1,5 @@
 import type { __UNSTABLE_Project_OnDiskState } from "@theatre/core";
-import { backgroundChildObjectIds, backgroundParentByChild, boxChildObjectIds, renderObjectIds } from "./sceneObjects";
+import { backgroundChildObjectIds, backgroundCollectionId, backgroundObjectIds, backgroundParentByChild, boxChildObjectIds, pinnableObjectIds } from "./sceneObjects";
 
 export const merchMonkLayoutVersion = 1;
 
@@ -19,10 +19,15 @@ const canonicalObjectNameByAlternateName = Object.fromEntries([
     [`> ${childId}`, `box / ${childId}`],
     [`box > ${childId}`, `box / ${childId}`],
   ]),
-  ...backgroundChildObjectIds.flatMap((childId) => [
-    [`> ${childId}`, `${backgroundParentByChild[childId]} / ${childId}`],
-    [`${backgroundParentByChild[childId]} > ${childId}`, `${backgroundParentByChild[childId]} / ${childId}`],
+  ...backgroundObjectIds.map((id) => [
+    id,
+    `${backgroundCollectionId} / ${id}`,
   ]),
+  ...backgroundChildObjectIds.flatMap((childId) => [
+    [`> ${childId}`, `${backgroundCollectionId} / ${backgroundParentByChild[childId]} / ${childId}`],
+    [`${backgroundParentByChild[childId]} > ${childId}`, `${backgroundCollectionId} / ${backgroundParentByChild[childId]} / ${childId}`],
+    [`${backgroundParentByChild[childId]} / ${childId}`, `${backgroundCollectionId} / ${backgroundParentByChild[childId]} / ${childId}`],
+  ] as Array<[string, string]>),
 ]) as Record<string, string>;
 
 function isRecord(value: unknown): value is SerializableRecord {
@@ -64,14 +69,14 @@ function migrateSheet(sheet: SerializableRecord) {
   const staticOverrides = sheet.staticOverrides;
   if (isRecord(staticOverrides) && isRecord(staticOverrides.byObject)) {
     Object.entries(staticOverrides.byObject).forEach(([objectId, value]) => {
-      if (renderObjectIds.includes(objectId as (typeof renderObjectIds)[number])) migrateStaticObject(value);
+      if (pinnableObjectIds.includes(objectId as (typeof pinnableObjectIds)[number])) migrateStaticObject(value);
     });
   }
 
   const sequence = sheet.sequence;
   if (!isRecord(sequence) || !isRecord(sequence.tracksByObject)) return;
   Object.entries(sequence.tracksByObject).forEach(([objectId, tracks]) => {
-    if (!renderObjectIds.includes(objectId as (typeof renderObjectIds)[number]) || !isRecord(tracks)) return;
+    if (!pinnableObjectIds.includes(objectId as (typeof pinnableObjectIds)[number]) || !isRecord(tracks)) return;
     const trackData = tracks.trackData;
     const trackIdByPropPath = tracks.trackIdByPropPath;
     if (!isRecord(trackData) || !isRecord(trackIdByPropPath)) return;
@@ -93,7 +98,7 @@ function stateUsesResponsiveUnits(state: LayoutState) {
     const staticOverrides = sheet.staticOverrides;
     if (isRecord(staticOverrides) && isRecord(staticOverrides.byObject)) {
       const hasResponsiveStaticValue = Object.entries(staticOverrides.byObject).some(([objectId, value]) => {
-        if (!renderObjectIds.includes(objectId as (typeof renderObjectIds)[number]) || !isRecord(value)) return false;
+        if (!pinnableObjectIds.includes(objectId as (typeof pinnableObjectIds)[number]) || !isRecord(value)) return false;
         if (typeof value.scale === "number" && Math.abs(value.scale) > 10) return true;
         if (isRecord(value.anchor)) {
           if (typeof value.anchor.x === "number" && Math.abs(value.anchor.x) > 3) return true;
@@ -107,7 +112,7 @@ function stateUsesResponsiveUnits(state: LayoutState) {
     const sequence = sheet.sequence;
     if (!isRecord(sequence) || !isRecord(sequence.tracksByObject)) return false;
     return Object.entries(sequence.tracksByObject).some(([objectId, tracks]) => {
-      if (!renderObjectIds.includes(objectId as (typeof renderObjectIds)[number]) || !isRecord(tracks)) return false;
+      if (!pinnableObjectIds.includes(objectId as (typeof pinnableObjectIds)[number]) || !isRecord(tracks)) return false;
       const trackData = tracks.trackData;
       const trackIdByPropPath = tracks.trackIdByPropPath;
       if (!isRecord(trackData) || !isRecord(trackIdByPropPath)) return false;

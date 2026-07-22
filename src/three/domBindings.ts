@@ -27,8 +27,13 @@ function isUsableElement(element: HTMLElement) {
   );
 }
 
-function selectCandidate(root: DomBindingRoot, selector: string, label: string) {
-  const matches = Array.from(root.querySelectorAll<HTMLElement>(selector));
+function selectCandidate(
+  root: DomBindingRoot,
+  selector: string,
+  label: string,
+  matchesBinding: (element: HTMLElement) => boolean = () => true,
+) {
+  const matches = Array.from(root.querySelectorAll<HTMLElement>(selector)).filter(matchesBinding);
   const usable = matches.filter(isUsableElement);
 
   if (usable.length > 1) {
@@ -48,9 +53,16 @@ export function resolveResponsiveDataElement({
   required = false,
 }: ResponsiveBindingOptions) {
   const escapedValue = escapeAttributeValue(value);
-  const exactSelector = "[" + valueAttribute + "=\"" + escapedValue + "\"][" + breakpointAttribute + "=\"" + breakpoint + "\"]";
+  const breakpointSelector = "[" + valueAttribute + "=\"" + escapedValue + "\"][" + breakpointAttribute + "]";
   const defaultSelector = "[" + valueAttribute + "=\"" + escapedValue + "\"]:not([" + breakpointAttribute + "])";
-  const exact = selectCandidate(root, exactSelector, label + " (" + breakpoint + ")");
+  const exact = selectCandidate(
+    root,
+    breakpointSelector,
+    label + " (" + breakpoint + ")",
+    (element) => element.getAttribute(breakpointAttribute)
+      ?.split(",")
+      .some((candidate) => candidate.trim() === breakpoint) === true,
+  );
   if (exact) return exact;
 
   const fallback = selectCandidate(root, defaultSelector, label + " (default)");
@@ -59,7 +71,7 @@ export function resolveResponsiveDataElement({
   if (required) {
     console.warn(
       "[Merch Monk] No visible " + label + " found for breakpoint \"" + breakpoint +
-      "\". Expected " + exactSelector + " or " + defaultSelector + ".",
+      "\". Expected " + breakpointSelector + " containing \"" + breakpoint + "\" or " + defaultSelector + ".",
     );
   }
 

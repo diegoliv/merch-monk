@@ -1,5 +1,7 @@
 export type Breakpoint = "mobile" | "tablet" | "desktop";
 
+export type NullObjectId = "bg_collection";
+
 export type BoxChildObjectId = "cap_box" | "cup_box" | "notebook_box";
 
 export type BackgroundObjectId =
@@ -36,6 +38,7 @@ export type ObjectId =
   | "flip_flop"
   | "crewneck"
   | "sweatpant"
+  | NullObjectId
   | BackgroundObjectId
   | BackgroundChildObjectId;
 

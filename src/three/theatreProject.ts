@@ -2,7 +2,7 @@ import { getProject, types } from "@theatre/core";
 import type { ISheetObject, __UNSTABLE_Project_OnDiskState } from "@theatre/core";
 import { breakpoints } from "./breakpoints";
 import { crewneckGridDefaults, type CrewneckGridSettings } from "./backgroundGridLayout";
-import { backgroundChildObjectIds, backgroundParentByChild, boxChildObjectIds, objectIds } from "./sceneObjects";
+import { backgroundChildObjectIds, backgroundCollectionId, backgroundObjectIds, backgroundParentByChild, boxChildObjectIds, objectIds } from "./sceneObjects";
 import { sceneTimeline } from "./sceneTimeline";
 import productionTheatreStateJson from "./merch-monk-home.theatre-project-state.json";
 import type { BackgroundChildObjectId, BackgroundObjectId, Breakpoint, ObjectId } from "./types";
@@ -99,9 +99,13 @@ function theatreDefaults(id?: ObjectId): TheatreObjectValue {
 }
 
 export function theatreObjectName(id: ObjectId) {
+  if (id === backgroundCollectionId) return id;
   if (boxChildObjectIds.includes(id as (typeof boxChildObjectIds)[number])) return `box / ${id}`;
+  if (backgroundObjectIds.includes(id as BackgroundObjectId)) {
+    return `${backgroundCollectionId} / ${id}`;
+  }
   if (backgroundChildObjectIds.includes(id as BackgroundChildObjectId)) {
-    return `${backgroundParentByChild[id as BackgroundChildObjectId]} / ${id}`;
+    return `${backgroundCollectionId} / ${backgroundParentByChild[id as BackgroundChildObjectId]} / ${id}`;
   }
   return id;
 }
