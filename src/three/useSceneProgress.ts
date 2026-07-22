@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useExperienceRuntime } from "../experienceRuntime";
+import { resolveResponsiveDataElement } from "./domBindings";
 import { useEditorStore } from "./editorStore";
 import { sceneTimeline } from "./sceneTimeline";
 import { getScrollRuntime } from "./scrollRuntime";
@@ -15,16 +16,26 @@ export function useSceneProgress(activeBreakpoint: Breakpoint) {
     const { ScrollTrigger } = getScrollRuntime();
     const triggers: Array<{ kill: () => void }> = [];
     const sheet = getTheatreSheet(activeBreakpoint);
+    const root = runtime.pageElement ?? document;
     const scroller = editor.breakpointMode === "auto"
       ? undefined
       : document.querySelector<HTMLElement>(runtime.previewScrollerSelector) ?? undefined;
     sheet.sequence.position = latestSequencePosition;
 
     sceneTimeline.forEach((step, index) => {
-      const element = document.querySelector(step.trigger);
+      const element = resolveResponsiveDataElement({
+        root,
+        valueAttribute: "data-scene",
+        breakpointAttribute: "data-scene-breakpoint",
+        value: step.id,
+        breakpoint: activeBreakpoint,
+        label: "scroll trigger for scene \"" + step.id + "\"",
+        required: true,
+      });
       if (!element) return;
 
       const trigger = ScrollTrigger.create({
+        id: "merch-monk:" + activeBreakpoint + ":" + step.id,
         trigger: element,
         scroller,
         start: "top top",
@@ -42,9 +53,10 @@ export function useSceneProgress(activeBreakpoint: Breakpoint) {
     });
 
     ScrollTrigger.refresh();
+    ScrollTrigger.update();
 
     return () => {
       triggers.forEach((trigger) => trigger.kill());
     };
-  }, [activeBreakpoint, editor.breakpointMode, editor.markers, runtime.previewScrollerSelector]);
+  }, [activeBreakpoint, editor.breakpointMode, editor.markers, runtime.pageElement, runtime.previewScrollerSelector]);
 }

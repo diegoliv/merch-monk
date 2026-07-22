@@ -157,18 +157,36 @@ The external JSON is loaded before the production bundle is imported because the
 
 ## Sections and scroll animation
 
-Each section occupies one unit of the Theatre sequence. The runtime uses the first selector found on each row:
+Each section occupies one unit of the Theatre sequence. Scroll binding is declared only through data attributes; CSS classes are not inspected by the runtime.
 
-| Step | Data attribute | Compatible Webflow class |
+| Step | `data-scene` value | Theatre range |
 | --- | --- | --- |
-| Hero | `data-scene="hero"` | `.section_hero` |
-| Ordering | `data-scene="ordering"` | `.section_home-ordering` |
-| Options | `data-scene="options"` | `.section_home-options` |
-| Momo | `data-scene="momo"` | `.section_home-momo` |
-| Pricing/Confidence | `data-scene="pricing"` | `.section_home-confidence` |
-| Minutes | `data-scene="minutes"` | `.section_home-weeks-minutes` |
+| Hero | `hero` | `0 -> 1` |
+| Ordering | `ordering` | `1 -> 2` |
+| Options | `options` | `2 -> 3` |
+| Momo | `momo` | `3 -> 4` |
+| Pricing/Confidence | `pricing` | `4 -> 5` |
+| Minutes | `minutes` | `5 -> 6` |
 
-For each section, ScrollTrigger uses `start: "top top"`, `end: "bottom top"`, and `scrub: true`. If a section does not exist, that step does not receive a trigger.
+`data-scene-breakpoint` may be `desktop`, `tablet`, or `mobile`. An element without `data-scene-breakpoint` is the desktop/base binding. The runtime first looks for the active breakpoint and then falls back to the base binding.
+
+```html
+<section data-scene="pricing">
+  <div data-scene="pricing" data-scene-breakpoint="mobile"></div>
+</section>
+```
+
+For each resolved element, ScrollTrigger uses `start: "top top"`, `end: "bottom top"`, and `scrub: true`. If no breakpoint-specific or base element exists, that step does not receive a trigger.
+
+### DOM-pinned 3D objects
+
+A top-level 3D object can use an HTML element as its responsive X/Y anchor:
+
+```html
+<div data-3d-pin="product_cup" data-3d-pin-breakpoint="mobile"></div>
+```
+
+The pin follows the same breakpoint override rules as scene triggers. While a pin is active, the HTML element center supplies the base X/Y position; Theatre `position.x` and `position.y` remain local offsets. Theatre continues to control Z, rotation, scale, opacity, visibility, materials, and authored object animation.
 
 ## Cup configurator controls
 
@@ -251,9 +269,9 @@ The active production breakpoint is resolved from the host width:
 
 | Breakpoint | Width | Theatre sheet |
 | --- | --- | --- |
-| Mobile | `< 700px` | `Scroll Scene / mobile` |
-| Tablet | `700–1099px` | `Scroll Scene / tablet` |
-| Desktop | `>= 1100px` | `Scroll Scene` |
+| Mobile | `< 768px` | `Scroll Scene / mobile` |
+| Tablet | `768–991px` | `Scroll Scene / tablet` |
+| Desktop | `>= 992px` | `Scroll Scene` |
 
 Desktop is the base. A dedicated device-icon switch in the Theatre toolbar selects Desktop, Tablet, or Mobile. A separate sliders icon toggles the optional **Utilities** pane.
 
@@ -394,6 +412,6 @@ The same `detail` object is passed to `window.MerchMonkStudio.onReady`. The host
 | Local production preview shows an error | Return to the editor on the same Webflow origin and click **Preview in production** again |
 | External state is ignored | Check the public URL, CORS, `definitionVersion`, `sheetsById`, and whether inline `theatreState` is overriding the URL |
 | Tablet/mobile repeat desktop | Confirm that the JSON contains `Scroll Scene / tablet` and `Scroll Scene / mobile` |
-| Scroll does not animate a step | Confirm the corresponding class or `data-scene` attribute and the section's actual height |
+| Scroll does not animate a step | Confirm the `data-scene` value, its optional `data-scene-breakpoint`, and the resolved element's actual height |
 | A published change does not appear | Use commit-pinned URLs instead of `@main` and check every referenced chunk |
 | Local behavior differs from production | Validate the `webflow-dist` bundle with the same Theatre state used in Webflow |

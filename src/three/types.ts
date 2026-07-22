@@ -56,7 +56,6 @@ export type SceneState = Record<ObjectId, ResponsiveObjectState>;
 
 export type TimelineStep = {
   id: string;
-  trigger: string;
   from: SceneStateId;
   to: SceneStateId;
 };

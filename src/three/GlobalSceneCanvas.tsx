@@ -4,6 +4,7 @@ import { Environment, OrthographicCamera, TransformControls, useGLTF } from "@re
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
 import { resolveBreakpointMode } from "./breakpoints";
+import { DomPinController, type DomPinMap } from "./DomPinController";
 import {
   applyBackgroundGridViewport,
   applyCrewneckGridViewport,
@@ -13,7 +14,7 @@ import {
   getCrewneckGridFollowWeight,
   usesBackgroundGridLayout,
 } from "./backgroundGridLayout";
-import { anchorToWorld, applyViewport, worldOffsetToPercent, worldScaleToPercent } from "./math";
+import { anchorToWorld, applyViewport, percentOffsetToWorld, worldOffsetToPercent, worldScaleToPercent } from "./math";
 import {
   backgroundChildByParent,
   backgroundChildObjectIds,
@@ -587,6 +588,8 @@ type MerchObjectProps = {
   id: ObjectId;
   appliedRef: MutableRefObject<AppliedSceneState>;
   theatreValuesRef: MutableRefObject<TheatreValues>;
+  domPinsRef: MutableRefObject<DomPinMap>;
+  activeViewportRef: MutableRefObject<ViewportInfo>;
   pointerStateRef: MutableRefObject<PointerState>;
   lockMotion: boolean;
   selectedObjectId: ObjectId;
@@ -605,7 +608,7 @@ type MerchObjectProps = {
   entranceStartRef: MutableRefObject<number | null>;
 };
 
-function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
+function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewportRef, pointerStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
   const { scene, animations } = useGLTF(modelPath);
   const { camera, gl } = useThree();
   const groupRef = useRef<THREE.Group | null>(null);
@@ -815,9 +818,22 @@ function MerchObject({ id, appliedRef, theatreValuesRef, pointerStateRef, lockMo
     const state = appliedRef.current[id];
     if (!state) return;
     const isBackground = isBackgroundObjectId(id);
+    let worldX = state.worldPosition[0];
+    let worldY = state.worldPosition[1];
+    const domPin = domPinsRef.current[id];
+    if (domPin?.active) {
+      const value = theatreValuesRef.current[id];
+      const offset = percentOffsetToWorld([
+        value.position.x,
+        value.position.y,
+        0,
+      ], activeViewportRef.current);
+      worldX = domPin.worldPosition[0] + offset[0];
+      worldY = domPin.worldPosition[1] + offset[1];
+    }
     groupRef.current.position.set(
-      state.worldPosition[0],
-      state.worldPosition[1],
+      worldX,
+      worldY,
       state.worldPosition[2],
     );
     baseEulerRef.current.set(state.rotation[0], state.rotation[1], state.rotation[2], "XYZ");
@@ -1095,6 +1111,7 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
   );
   const activeViewportRef = useRef(activeViewport);
   activeViewportRef.current = activeViewport;
+  const domPinsRef = useRef<DomPinMap>({});
   useSceneProgress(activeBreakpoint);
   const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
   const theatreValuesRef = useRef<TheatreValues>(initialTheatreValues(activeBreakpoint));
@@ -1235,7 +1252,8 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
       return;
     }
 
-    const anchorWorld = anchorToWorld([current.anchor.x, current.anchor.y], activeViewport);
+    const domPin = domPinsRef.current[editor.selectedObject];
+    const anchorWorld = domPin?.active ? domPin.worldPosition : anchorToWorld([current.anchor.x, current.anchor.y], activeViewport);
     const position = worldOffsetToPercent([
       selectedObject.position.x - anchorWorld[0],
       selectedObject.position.y - anchorWorld[1],
@@ -1262,6 +1280,12 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
 
   return (
     <>
+      <DomPinController
+        root={runtime.pageElement ?? document}
+        breakpoint={activeBreakpoint}
+        viewport={activeViewport}
+        pinsRef={domPinsRef}
+      />
       <SceneReadinessController entranceStartRef={entranceStartRef} onReady={onReady} />
       <OrthographicCamera
         makeDefault
@@ -1277,6 +1301,8 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
           id={id}
           appliedRef={appliedRef}
           theatreValuesRef={theatreValuesRef}
+          domPinsRef={domPinsRef}
+          activeViewportRef={activeViewportRef}
           pointerStateRef={pointerStateRef}
           lockMotion={editor.enabled && (
             editor.selectedObject === id ||

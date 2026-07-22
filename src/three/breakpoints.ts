@@ -17,14 +17,14 @@ export const breakpointPreviewSizes: Record<Breakpoint, { width: number; height:
 };
 
 export const breakpointPreviewRanges: Record<Breakpoint, { minWidth: number; maxWidth: number }> = {
-  desktop: { minWidth: 1100, maxWidth: 1600 },
-  tablet: { minWidth: 700, maxWidth: 1099 },
-  mobile: { minWidth: 320, maxWidth: 699 },
+  desktop: { minWidth: 992, maxWidth: 1600 },
+  tablet: { minWidth: 768, maxWidth: 991 },
+  mobile: { minWidth: 320, maxWidth: 767 },
 };
 
 export function getBreakpoint(width: number): Breakpoint {
-  if (width < 700) return "mobile";
-  if (width < 1100) return "tablet";
+  if (width < 768) return "mobile";
+  if (width < 992) return "tablet";
   return "desktop";
 }
 

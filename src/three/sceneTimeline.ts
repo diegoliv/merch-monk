@@ -1,43 +1,40 @@
 import type { SceneStateId, TimelineStep } from "./types";
 
-export const sceneTimeline: TimelineStep[] = [
+export const sceneTimeline = [
   {
     id: "hero",
-    trigger: "[data-scene='hero'], .section_hero",
     from: "heroIntro",
     to: "heroOutro",
   },
   {
     id: "ordering",
-    trigger: "[data-scene='ordering'], .section_home-ordering",
     from: "heroOutro",
     to: "catalogIntro",
   },
   {
     id: "options",
-    trigger: "[data-scene='options'], .section_home-options",
     from: "catalogIntro",
     to: "processIntro",
   },
   {
     id: "momo",
-    trigger: "[data-scene='momo'], .section_home-momo",
     from: "processIntro",
     to: "momoIntro",
   },
   {
     id: "pricing",
-    trigger: "[data-scene='pricing'], .section_home-confidence",
     from: "momoIntro",
     to: "finalCtaIntro",
   },
   {
     id: "minutes",
-    trigger: "[data-scene='minutes'], .section_home-weeks-minutes",
     from: "finalCtaIntro",
     to: "finalCtaIntro",
   },
-];
+] as const satisfies readonly TimelineStep[];
+
+export type SceneId = (typeof sceneTimeline)[number]["id"];
+export const sceneIds = sceneTimeline.map((step) => step.id);
 
 export type TimelinePresetKeyframe = {
   percent: number;

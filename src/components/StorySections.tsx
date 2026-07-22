@@ -65,7 +65,7 @@ export function PricingConfiguratorSection({ id, title, body, selectedColor, onC
       </div>
       <div className="pricing-configurator" aria-label="Product configuration preview">
         <div className="product-preview-panel" aria-hidden="true">
-          <div className="product-cup-stage" />
+          <div className="product-cup-stage" data-3d-pin="product_cup" data-3d-pin-breakpoint="mobile" />
         </div>
 
         <div className="config-card">
