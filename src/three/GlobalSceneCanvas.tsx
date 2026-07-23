@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, OrthographicCamera, TransformControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
-import { resolveBreakpointMode } from "./breakpoints";
+import { breakpointDprRanges, resolveBreakpointMode } from "./breakpoints";
 import { BackgroundCollection } from "./BackgroundCollection";
 import { DomPinController, type DomPinMap } from "./DomPinController";
 import {
@@ -1507,13 +1507,14 @@ export function GlobalSceneCanvas({ productCupColor, productCupArtworkUrl = null
   const runtime = useExperienceRuntime();
   const viewport = useViewportInfo();
   const { inputRef: motionInputRef } = useSceneMotionInput(viewport.breakpoint);
+  const dpr = breakpointDprRanges[viewport.breakpoint];
 
   return (
     <>
       <div className={`scene-layer ${runtime.mode === "webflow" ? "is-webflow" : ""} ${editor.enabled ? "is-editing" : ""}`} aria-hidden="true">
         <Canvas
           gl={{ antialias: true, alpha: true }}
-          dpr={[1, 2]}
+          dpr={dpr}
           onCreated={({ gl, scene }) => {
             configureSceneRenderer(gl, scene);
           }}
