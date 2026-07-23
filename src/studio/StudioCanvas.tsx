@@ -10,17 +10,14 @@ import {
   useState,
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Environment, OrbitControls, TransformControls } from "@react-three/drei";
+import { OrbitControls, TransformControls } from "@react-three/drei";
 import type {
   OrbitControls as OrbitControlsImpl,
   TransformControls as TransformControlsImpl,
 } from "three-stdlib";
 import * as THREE from "three";
-import {
-  configureSceneRenderer,
-  sceneEnvironmentIntensity,
-  studioEnvironmentPreset,
-} from "../three/sceneAppearance";
+import { configureSceneRenderer, sceneEnvironmentIntensity } from "../three/sceneAppearance";
+import { resolveSceneEnvironmentUrl, SceneEnvironment } from "../three/SceneEnvironment";
 import { StudioObject } from "./StudioObject";
 import type {
   CameraView,
@@ -165,6 +162,7 @@ function StudioScene({
   onApiReady,
 }: StudioSceneProps) {
   const { camera, gl, invalidate, scene, size } = useThree();
+  const environmentUrl = resolveSceneEnvironmentUrl(modelUrl);
   const orbitRef = useRef<OrbitControlsImpl>(null);
   const transformRef = useRef<TransformControlsImpl>(null);
   const directionalLightRef = useRef<THREE.DirectionalLight>(null);
@@ -326,11 +324,7 @@ function StudioScene({
 
   return (
     <>
-      <Environment
-        preset={studioEnvironmentPreset}
-        background={false}
-        environmentIntensity={environmentIntensity}
-      />
+      <SceneEnvironment url={environmentUrl} intensity={environmentIntensity} />
 
       <directionalLight
         ref={directionalLightRef}

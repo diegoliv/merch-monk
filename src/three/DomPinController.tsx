@@ -20,7 +20,8 @@ type DomPinControllerProps = {
 };
 
 export function DomPinController({ root, breakpoint, viewport, pinsRef }: DomPinControllerProps) {
-  const { gl } = useThree();
+  const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
   const rescanFrameRef = useRef(0);
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export function DomPinController({ root, breakpoint, viewport, pinsRef }: DomPin
       });
 
       pinsRef.current = next;
+      invalidate();
     }
 
     function scheduleRescan() {
@@ -84,7 +86,7 @@ export function DomPinController({ root, breakpoint, viewport, pinsRef }: DomPin
       mutationObserver?.disconnect();
       pinsRef.current = {};
     };
-  }, [breakpoint, gl.domElement, pinsRef, root]);
+  }, [breakpoint, gl.domElement, invalidate, pinsRef, root]);
 
   useFrame(() => {
     const canvasRect = gl.domElement.getBoundingClientRect();

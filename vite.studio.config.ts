@@ -8,10 +8,12 @@ export default defineConfig({
   plugins: [
     react(),
     {
-      name: "copy-studio-model",
+      name: "copy-studio-scene-assets",
       closeBundle() {
         mkdirSync(resolve("studio-dist/models"), { recursive: true });
+        mkdirSync(resolve("studio-dist/environments"), { recursive: true });
         copyFileSync(resolve("public/models/merch_monk_website.glb"), resolve("studio-dist/models/merch_monk_website.glb"));
+        copyFileSync(resolve("public/environments/lebombo_512.hdr"), resolve("studio-dist/environments/lebombo_512.hdr"));
       },
     },
   ],

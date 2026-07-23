@@ -1,6 +1,5 @@
 import * as THREE from "three";
 
-export const studioEnvironmentPreset = "apartment" as const;
 export const sceneToneMappingExposure = 0.82;
 export const sceneEnvironmentIntensity = 0.82;
 

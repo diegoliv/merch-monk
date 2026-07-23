@@ -9,7 +9,7 @@ import type { Breakpoint } from "./types";
 
 let latestSequencePosition = 0;
 
-export function useSceneProgress(activeBreakpoint: Breakpoint) {
+export function useSceneProgress(activeBreakpoint: Breakpoint, onProgress?: () => void) {
   const editor = useEditorStore();
   const runtime = useExperienceRuntime();
   useEffect(() => {
@@ -46,6 +46,7 @@ export function useSceneProgress(activeBreakpoint: Breakpoint) {
           const sequencePosition = index + self.progress;
           latestSequencePosition = sequencePosition;
           sheet.sequence.position = sequencePosition;
+          onProgress?.();
         },
       });
 
@@ -54,9 +55,10 @@ export function useSceneProgress(activeBreakpoint: Breakpoint) {
 
     ScrollTrigger.refresh();
     ScrollTrigger.update();
+    onProgress?.();
 
     return () => {
       triggers.forEach((trigger) => trigger.kill());
     };
-  }, [activeBreakpoint, editor.breakpointMode, editor.markers, runtime.pageElement, runtime.previewScrollerSelector]);
+  }, [activeBreakpoint, editor.breakpointMode, editor.markers, onProgress, runtime.pageElement, runtime.previewScrollerSelector]);
 }
