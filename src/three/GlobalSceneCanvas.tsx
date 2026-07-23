@@ -1,9 +1,9 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Environment, OrthographicCamera, TransformControls, useGLTF } from "@react-three/drei";
+import { OrthographicCamera, TransformControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
-import { resolveBreakpointMode } from "./breakpoints";
+import { breakpointDprRanges, resolveBreakpointMode } from "./breakpoints";
 import { BackgroundCollection } from "./BackgroundCollection";
 import { DomPinController, type DomPinMap } from "./DomPinController";
 import {
@@ -34,17 +34,27 @@ import { useViewportInfo } from "./useViewportInfo";
 import { useSceneMotionInput, type SceneMotionInput } from "./useSceneMotionInput";
 import type { ProductCupColorValue, ProductCupDecorationMethod } from "../components/StorySections";
 import { useExperienceRuntime } from "../experienceRuntime";
-import { configureSceneRenderer, studioEnvironmentPreset, tuneMaterial } from "./sceneAppearance";
+import { configureSceneRenderer, tuneMaterial } from "./sceneAppearance";
+import {
+  createSceneInteractionRegistry,
+  DemandFrameEvents,
+  SceneInteractionController,
+  type SceneInteractionRegistry,
+  type SceneInteractionState,
+} from "./SceneInteractionController";
+import { resolveSceneEnvironmentUrl, SceneEnvironment } from "./SceneEnvironment";
 import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, BoxChildObjectId, Breakpoint, ObjectId, Vec3, ViewportInfo } from "./types";
 
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
+const environmentPath = resolveSceneEnvironmentUrl(modelPath);
 const crewneckLogoPath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5527787af01c167ce42d3c_f488968c6e31020e99fcf5deeeb44ad6_crewneck-logo.avif";
 const boxTexturePath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5a88f85ff267f9a82727a8_box_body.avif";
 const boxTextureTargets = [
-  { nodeName: "box", materialName: null, recursive: false, overlay: false, path: boxTexturePath },
+  { nodeName: "box", materialName: null, fallbackMaterialIndex: null, recursive: false, overlay: false, path: boxTexturePath },
   {
     nodeName: "cup_box",
     materialName: "cup_uv",
+    fallbackMaterialIndex: 0,
     recursive: true,
     overlay: true,
     path: "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a613ce5aa236d5e3064fef2_bottle-logo.avif",
@@ -52,6 +62,7 @@ const boxTextureTargets = [
   {
     nodeName: "notebook_box",
     materialName: "notebook_uv",
+    fallbackMaterialIndex: 0,
     overlay: true,
     recursive: true,
     path: "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a613ce50330e513548c5356_notebook-logo.avif",
@@ -335,6 +346,7 @@ function applyBoxTexture(
   object: THREE.Object3D,
   nodeName: string,
   materialName: string | null,
+  fallbackMaterialIndex: number | null,
   recursive: boolean,
   overlay: boolean,
   texture: THREE.Texture,
@@ -343,14 +355,21 @@ function applyBoxTexture(
   if (!target) return [];
 
   const states: BoxTextureMaterialState[] = [];
+  let fallbackApplied = false;
   target.traverse((child) => {
     if (!recursive && child !== target) return;
     if (!("material" in child)) return;
     const mesh = child as THREE.Mesh;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    materials.forEach((material) => {
+    materials.forEach((material, materialIndex) => {
       if (!(material instanceof THREE.MeshStandardMaterial)) return;
-      if (materialName && material.name !== materialName) return;
+      const matchesNamedMaterial = materialName === null || material.name === materialName;
+      const matchesFallbackMaterial = (
+        fallbackMaterialIndex !== null &&
+        !fallbackApplied &&
+        materialIndex === fallbackMaterialIndex
+      );
+      if (!matchesNamedMaterial && !matchesFallbackMaterial) return;
       const appliedTexture = overlay ? createBoxTextureOverlay(material, texture) : texture;
       if (!appliedTexture) return;
       states.push({
@@ -359,6 +378,7 @@ function applyBoxTexture(
         color: material.color.clone(),
         texture: appliedTexture,
       });
+      if (matchesFallbackMaterial) fallbackApplied = true;
       material.map = appliedTexture;
       material.color.set("#ffffff");
       material.needsUpdate = true;
@@ -663,6 +683,8 @@ type MerchObjectProps = {
   activeViewportRef: MutableRefObject<ViewportInfo>;
   backgroundCollectionRef: MutableRefObject<THREE.Group | null>;
   motionInputRef: MutableRefObject<SceneMotionInput>;
+  interactionRegistry: SceneInteractionRegistry;
+  interactionStateRef: MutableRefObject<SceneInteractionState>;
   lockMotion: boolean;
   selectedObjectId: ObjectId;
   editorEnabled: boolean;
@@ -680,18 +702,18 @@ type MerchObjectProps = {
   entranceStartRef: MutableRefObject<number | null>;
 };
 
-function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewportRef, backgroundCollectionRef, motionInputRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
+function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewportRef, backgroundCollectionRef, motionInputRef, interactionRegistry, interactionStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
   const { scene, animations } = useGLTF(modelPath);
-  const { camera, gl } = useThree();
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
   const groupRef = useRef<THREE.Group | null>(null);
-  const pointerRef = useRef(new THREE.Vector2());
   const pinTargetRef = useRef(new THREE.Vector3());
   const collectionLocalTargetRef = useRef(new THREE.Vector3());
   const collectionWorldTargetRef = useRef(new THREE.Vector3());
   const collectionWorldScaleRef = useRef(new THREE.Vector3());
   const collectionWorldQuaternionRef = useRef(new THREE.Quaternion());
   const collectionFollowQuaternionRef = useRef(new THREE.Quaternion());
-  const raycasterRef = useRef(new THREE.Raycaster());
   const tiltRef = useRef(new THREE.Vector2());
   const targetTiltRef = useRef(new THREE.Vector2());
   const baseEulerRef = useRef(new THREE.Euler());
@@ -700,7 +722,6 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
   const globalTiltQuaternionRef = useRef(new THREE.Quaternion());
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const boxActionRef = useRef<THREE.AnimationAction | null>(null);
-  const boxRef = useRef(new THREE.Box3());
   const centerRef = useRef(new THREE.Vector3());
   const childRotationEulerRef = useRef(new THREE.Euler());
   const childRotationQuaternionRef = useRef(new THREE.Quaternion());
@@ -752,6 +773,18 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     child.userData.restTransform = rest;
     return rest;
   }, [backgroundChildId, object]);
+  const motionObject = useMemo(() => {
+    if (!object) return null;
+    if (backgroundChildId) return object.getObjectByName(backgroundChildId) ?? null;
+    return isBackgroundObjectId(id) ? null : object;
+  }, [backgroundChildId, id, object]);
+  const motionCenterLocal = useMemo(() => {
+    if (!motionObject) return new THREE.Vector3();
+    motionObject.updateWorldMatrix(true, true);
+    const bounds = new THREE.Box3().setFromObject(motionObject);
+    if (bounds.isEmpty()) return new THREE.Vector3();
+    return motionObject.worldToLocal(bounds.getCenter(new THREE.Vector3()));
+  }, [motionObject]);
   const materials = useMemo(() => (object ? collectMaterials(object) : []), [object]);
   const backgroundChildMaterials = useMemo(() => {
     if (!backgroundChildId || !object) return [];
@@ -766,6 +799,21 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       return result;
     }, {} as Partial<Record<BoxChildObjectId, THREE.Material[]>>);
   }, [id, object]);
+  useEffect(() => {
+    if (!motionObject) return;
+    interactionRegistry.register(id, {
+      object: motionObject,
+      isActive: () => {
+        const state = appliedRef.current[id];
+        const motionValue = backgroundChildId ? theatreValuesRef.current[backgroundChildId] : state;
+        return Boolean(
+          groupRef.current && state?.visible && state.opacity > 0.08 &&
+          motionValue?.visible && motionValue.opacity > 0.08,
+        );
+      },
+    });
+    return () => interactionRegistry.unregister(id, motionObject);
+  }, [appliedRef, backgroundChildId, id, interactionRegistry, motionObject, theatreValuesRef]);
   useEffect(() => {
     if (id !== "crewneck" || !object) return;
 
@@ -790,6 +838,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       const showLogo = theatreValuesRef.current.crewneck.showLogo === true;
       setCrewneckLogoVisible(logoStates, showLogo);
       lastShowLogoRef.current = showLogo;
+      invalidate();
     };
     image.onerror = () => {
       if (!cancelled) console.warn("[Merch Monk] Could not load crewneck logo texture: " + crewneckLogoPath);
@@ -805,7 +854,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       crewneckLogoMaterialsRef.current = [];
       lastShowLogoRef.current = null;
     };
-  }, [id, materials, object, theatreValuesRef]);
+  }, [id, invalidate, materials, object, theatreValuesRef]);
   useEffect(() => {
     if (id !== "box" || !object) return;
 
@@ -831,6 +880,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
             object,
             target.nodeName,
             target.materialName,
+            target.fallbackMaterialIndex,
             target.recursive,
             target.overlay,
             loadedTexture,
@@ -840,6 +890,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
           }
           appliedStates.forEach((state) => textures.add(state.texture));
           materialStates.push(...appliedStates);
+          invalidate();
         },
         undefined,
         () => {
@@ -858,7 +909,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       });
       textures.forEach((texture) => texture.dispose());
     };
-  }, [gl, id, object]);
+  }, [gl, id, invalidate, object]);
   useEffect(() => {
     if (id !== "product_cup" || !object) return;
 
@@ -866,6 +917,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     let colorTexture: THREE.CanvasTexture | null = null;
     let bumpTexture: THREE.CanvasTexture | null = null;
     applyProductCupMaterial(object, productCupColor, productCupDecorationMethod);
+    invalidate();
     if (!productCupArtworkUrl) return;
 
     const artworkUrl = productCupArtworkUrl;
@@ -879,6 +931,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       colorTexture = textures.colorTexture;
       bumpTexture = textures.bumpTexture;
       applyProductCupMaterial(object, productCupColor, productCupDecorationMethod, colorTexture, bumpTexture);
+      invalidate();
     };
     image.onerror = () => {
       if (!cancelled) console.warn(`[Merch Monk] Could not load product cup artwork: ${artworkUrl}`);
@@ -903,7 +956,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       colorTexture?.dispose();
       bumpTexture?.dispose();
     };
-  }, [id, object, productCupArtworkUrl, productCupColor, productCupDecorationMethod]);
+  }, [id, invalidate, object, productCupArtworkUrl, productCupColor, productCupDecorationMethod]);
 
   function applyState(tilt = tiltRef.current, entranceScale = 1) {
     const group = groupRef.current;
@@ -1103,14 +1156,12 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     if (lockMotion) {
       tiltRef.current.lerp(targetTiltRef.current.set(0, 0), 0.18);
       applyState(tiltRef.current, entranceScale);
+      const entranceAnimating = entranceEnabled && entranceStart !== null && entranceProgress < 1;
+      const tiltAnimating = tiltRef.current.lengthSq() > 0.0000001;
+      if (entranceAnimating || tiltAnimating) invalidate();
       return;
     }
 
-    const motionObject = backgroundChildId
-      ? object?.getObjectByName(backgroundChildId) ?? null
-      : isBackgroundObjectId(id)
-        ? null
-        : groupRef.current;
     const motionValue = backgroundChildId ? theatreValuesRef.current[backgroundChildId] : state;
 
     if (
@@ -1130,23 +1181,19 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       const vertical = THREE.MathUtils.clamp(motionInput.orientationY / orientationRange, -1, 1);
       targetTiltRef.current.set(-vertical * hoverTiltX, horizontal * hoverTiltY);
     } else {
-      const canvasBounds = gl.domElement.getBoundingClientRect();
-      pointerRef.current.set(
-        ((motionInput.clientX - canvasBounds.left) / Math.max(canvasBounds.width, 1)) * 2 - 1,
-        -((motionInput.clientY - canvasBounds.top) / Math.max(canvasBounds.height, 1)) * 2 + 1,
-      );
-      groupRef.current.updateMatrixWorld(true);
-      raycasterRef.current.setFromCamera(pointerRef.current, camera);
-
-      const isPointerOverObject = raycasterRef.current.intersectObject(motionObject, true).length > 0;
+      const pointer = interactionStateRef.current.pointerNdc;
+      const isPointerOverObject = interactionStateRef.current.hoveredId === id;
       if (isPointerOverObject) {
         targetTiltRef.current.set(0, 0);
       } else {
-        boxRef.current.setFromObject(motionObject);
-        boxRef.current.getCenter(centerRef.current).project(camera);
+        motionObject.updateWorldMatrix(true, false);
+        centerRef.current
+          .copy(motionCenterLocal)
+          .applyMatrix4(motionObject.matrixWorld)
+          .project(camera);
 
-        const horizontal = pointerRef.current.x - centerRef.current.x;
-        const vertical = pointerRef.current.y - centerRef.current.y;
+        const horizontal = pointer.x - centerRef.current.x;
+        const vertical = pointer.y - centerRef.current.y;
         const distance = Math.hypot(horizontal, vertical);
         const influence = THREE.MathUtils.clamp(distance / hoverRange, 0, 1);
 
@@ -1160,6 +1207,9 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
 
     tiltRef.current.lerp(targetTiltRef.current, hoverFollow);
     applyState(tiltRef.current, entranceScale);
+    const entranceAnimating = entranceEnabled && entranceStart !== null && entranceProgress < 1;
+    const tiltAnimating = hoverFollow > 0 && tiltRef.current.distanceToSquared(targetTiltRef.current) > 0.0000001;
+    if (entranceAnimating || tiltAnimating) invalidate();
   });
 
   if (!object) return null;
@@ -1220,6 +1270,7 @@ function SceneReadinessController({ entranceStartRef, onReady }: {
   entranceStartRef: MutableRefObject<number | null>;
   onReady?: () => void;
 }) {
+  const invalidate = useThree((state) => state.invalidate);
   const theatreReadyRef = useRef(false);
   const completedFramesRef = useRef(0);
   const signalledRef = useRef(false);
@@ -1229,29 +1280,35 @@ function SceneReadinessController({ entranceStartRef, onReady }: {
   useEffect(() => {
     let cancelled = false;
     void theatreProject.ready.then(() => {
-      if (!cancelled) theatreReadyRef.current = true;
+      if (!cancelled) {
+        theatreReadyRef.current = true;
+        invalidate();
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [invalidate]);
 
   useFrame(({ clock }) => {
     if (!theatreReadyRef.current || signalledRef.current) return;
     if (completedFramesRef.current < 1) {
       completedFramesRef.current += 1;
+      invalidate();
       return;
     }
 
     signalledRef.current = true;
     entranceStartRef.current = clock.elapsedTime;
     onReadyRef.current?.();
+    invalidate();
   });
 
   return null;
 }
 
 function SceneContent({ productCupColor, productCupArtworkUrl = null, productCupDecorationMethod = "digital", motionInputRef, onReady, viewport }: SceneContentProps) {
+  const invalidate = useThree((state) => state.invalidate);
   const performanceDebug = getPerformanceDebug();
   if (performanceDebug) performanceDebug.sceneRenders += 1;
   const runtime = useExperienceRuntime();
@@ -1266,7 +1323,12 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
   activeViewportRef.current = activeViewport;
   const domPinsRef = useRef<DomPinMap>({});
   const backgroundCollectionRef = useRef<THREE.Group | null>(null);
-  useSceneProgress(activeBreakpoint);
+  const interactionRegistry = useMemo(() => createSceneInteractionRegistry(), []);
+  const interactionStateRef = useRef<SceneInteractionState>({
+    hoveredId: null,
+    pointerNdc: new THREE.Vector2(),
+  });
+  useSceneProgress(activeBreakpoint, invalidate);
   const [selectedTransformTarget, setSelectedTransformTarget] = useState<{
     id: ObjectId;
     object: THREE.Object3D;
@@ -1296,14 +1358,16 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
       if (debug) debug.theatreUpdates += 1;
       theatreValuesRef.current[id] = value as TheatreObjectValue;
       updateAppliedTheatreValue(appliedRef.current, theatreValuesRef.current, id, activeViewportRef.current);
+      invalidate();
     }));
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, [activeBreakpoint]);
+  }, [activeBreakpoint, invalidate]);
 
   useEffect(() => {
     appliedRef.current = applyTheatreValues(theatreValuesRef.current, activeViewport);
-  }, [activeViewport]);
+    invalidate();
+  }, [activeViewport, invalidate]);
 
   function saveTransform() {
     if (!selectedTransformTarget || selectedTransformTarget.id !== editor.selectedObject) return;
@@ -1436,6 +1500,8 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
         activeViewportRef={activeViewportRef}
         backgroundCollectionRef={backgroundCollectionRef}
         motionInputRef={motionInputRef}
+        interactionRegistry={interactionRegistry}
+        interactionStateRef={interactionStateRef}
         lockMotion={editor.enabled && (
           editor.selectedObject === id ||
           (editor.selectedObject === backgroundCollectionId && isBackgroundObjectId(id)) ||
@@ -1468,6 +1534,11 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
         viewport={activeViewport}
         pinsRef={domPinsRef}
       />
+      <SceneInteractionController
+        inputRef={motionInputRef}
+        registry={interactionRegistry}
+        stateRef={interactionStateRef}
+      />
       <SceneReadinessController entranceStartRef={entranceStartRef} onReady={onReady} />
       <OrthographicCamera
         makeDefault
@@ -1476,7 +1547,7 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
         near={0.01}
         far={100}
       />
-      <Environment preset={studioEnvironmentPreset} background={false} />
+      <SceneEnvironment url={environmentPath} />
       {renderObjectIds.filter((id) => !isBackgroundObjectId(id)).map(renderMerchObject)}
       <BackgroundCollection
         activeViewportRef={activeViewportRef}
@@ -1506,18 +1577,24 @@ export function GlobalSceneCanvas({ productCupColor, productCupArtworkUrl = null
   const editor = useEditorStore();
   const runtime = useExperienceRuntime();
   const viewport = useViewportInfo();
-  const { inputRef: motionInputRef } = useSceneMotionInput(viewport.breakpoint);
+  const invalidateRef = useRef<() => void>(() => undefined);
+  const requestFrame = useCallback(() => invalidateRef.current(), []);
+  const { inputRef: motionInputRef } = useSceneMotionInput(viewport.breakpoint, requestFrame);
+  const dpr = breakpointDprRanges[viewport.breakpoint];
 
   return (
     <>
       <div className={`scene-layer ${runtime.mode === "webflow" ? "is-webflow" : ""} ${editor.enabled ? "is-editing" : ""}`} aria-hidden="true">
         <Canvas
           gl={{ antialias: true, alpha: true }}
-          dpr={[1, 2]}
-          onCreated={({ gl, scene }) => {
+          frameloop="demand"
+          dpr={dpr}
+          onCreated={({ gl, scene, invalidate }) => {
+            invalidateRef.current = invalidate;
             configureSceneRenderer(gl, scene);
           }}
         >
+          <DemandFrameEvents />
           {performanceDebugEnabled ? <PerformanceProbe /> : null}
           <Suspense fallback={null}>
             <SceneContent

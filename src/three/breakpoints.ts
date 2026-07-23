@@ -22,6 +22,12 @@ export const breakpointPreviewRanges: Record<Breakpoint, { minWidth: number; max
   mobile: { minWidth: 320, maxWidth: 767 },
 };
 
+export const breakpointDprRanges: Record<Breakpoint, [min: number, max: number]> = {
+  desktop: [1, 1.5],
+  tablet: [1, 1.25],
+  mobile: [1, 1],
+};
+
 export function getBreakpoint(width: number): Breakpoint {
   if (width < 768) return "mobile";
   if (width < 992) return "tablet";

@@ -57,9 +57,11 @@ function resetInput(input: SceneMotionInput, source: SceneMotionInput["source"])
   input.source = source;
 }
 
-export function useSceneMotionInput(breakpoint: Breakpoint): {
+export function useSceneMotionInput(breakpoint: Breakpoint, onInput?: () => void): {
   inputRef: MutableRefObject<SceneMotionInput>;
 } {
+  const onInputRef = useRef(onInput);
+  onInputRef.current = onInput;
   const inputRef = useRef<SceneMotionInput>({
     active: false,
     clientX: 0,
@@ -73,16 +75,19 @@ export function useSceneMotionInput(breakpoint: Breakpoint): {
   useEffect(() => {
     const input = inputRef.current;
     resetInput(input, usesOrientation ? "orientation" : "pointer");
+    onInputRef.current?.();
 
     if (!usesOrientation) {
       function handlePointerMove(event: PointerEvent) {
         input.clientX = event.clientX;
         input.clientY = event.clientY;
         input.active = true;
+        onInputRef.current?.();
       }
 
       function deactivatePointer() {
         input.active = false;
+        onInputRef.current?.();
       }
 
       window.addEventListener("pointermove", handlePointerMove, { passive: true });
@@ -108,6 +113,7 @@ export function useSceneMotionInput(breakpoint: Breakpoint): {
       input.active = false;
       input.orientationX = 0;
       input.orientationY = 0;
+      onInputRef.current?.();
     }
 
     function handleOrientation(event: DeviceOrientationEvent) {
@@ -124,6 +130,7 @@ export function useSceneMotionInput(breakpoint: Breakpoint): {
       input.orientationX += (nextX - input.orientationX) * 0.22;
       input.orientationY += (nextY - input.orientationY) * 0.22;
       input.active = true;
+      onInputRef.current?.();
     }
 
     function startOrientationInput() {
@@ -152,6 +159,7 @@ export function useSceneMotionInput(breakpoint: Breakpoint): {
         })
         .catch(() => {
           resetInput(input, "orientation");
+          onInputRef.current?.();
         });
     }
 
@@ -170,6 +178,7 @@ export function useSceneMotionInput(breakpoint: Breakpoint): {
       window.removeEventListener("click", requestOrientationOnFirstClick, true);
       stopOrientationInput();
       resetInput(input, "orientation");
+      onInputRef.current?.();
     };
   }, [usesOrientation]);
 
