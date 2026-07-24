@@ -24,6 +24,7 @@ type MerchMonkWebflowConfig = {
   productionEntry?: string;
   productionCss?: string;
   runtimeSource?: "local-loading" | "local" | "local-error" | "local-state-error" | "production";
+  mobileGyroscopeEnabled?: boolean;
   productColor?: ProductCupColorKey;
   modelUrl?: string;
   theatreState?: __UNSTABLE_Project_OnDiskState;
@@ -95,6 +96,7 @@ function mountWebflowExperience() {
       <ExperienceRuntimeProvider value={runtime}>
         <WebflowExperience
           runtime={runtime}
+          mobileGyroscopeEnabled={config.mobileGyroscopeEnabled !== false}
           productColor={config.productColor}
           showEditor={config.editor === true}
           onSceneReady={handleSceneReady}

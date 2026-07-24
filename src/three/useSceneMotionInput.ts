@@ -57,7 +57,11 @@ function resetInput(input: SceneMotionInput, source: SceneMotionInput["source"])
   input.source = source;
 }
 
-export function useSceneMotionInput(breakpoint: Breakpoint, onInput?: () => void): {
+export function useSceneMotionInput(
+  breakpoint: Breakpoint,
+  mobileGyroscopeEnabled: boolean,
+  onInput?: () => void,
+): {
   inputRef: MutableRefObject<SceneMotionInput>;
 } {
   const onInputRef = useRef(onInput);
@@ -70,14 +74,15 @@ export function useSceneMotionInput(breakpoint: Breakpoint, onInput?: () => void
     orientationY: 0,
     source: breakpoint === "desktop" ? "pointer" : "orientation",
   });
-  const usesOrientation = breakpoint !== "desktop";
+  const usesPointer = breakpoint === "desktop";
+  const usesOrientation = !usesPointer && mobileGyroscopeEnabled;
 
   useEffect(() => {
     const input = inputRef.current;
-    resetInput(input, usesOrientation ? "orientation" : "pointer");
+    resetInput(input, usesPointer ? "pointer" : "orientation");
     onInputRef.current?.();
 
-    if (!usesOrientation) {
+    if (usesPointer) {
       function handlePointerMove(event: PointerEvent) {
         input.clientX = event.clientX;
         input.clientY = event.clientY;
@@ -99,6 +104,8 @@ export function useSceneMotionInput(breakpoint: Breakpoint, onInput?: () => void
         window.removeEventListener("blur", deactivatePointer);
       };
     }
+
+    if (!usesOrientation) return;
 
     const constructor = getOrientationEventConstructor();
     if (!constructor) return;
@@ -180,7 +187,7 @@ export function useSceneMotionInput(breakpoint: Breakpoint, onInput?: () => void
       resetInput(input, "orientation");
       onInputRef.current?.();
     };
-  }, [usesOrientation]);
+  }, [usesOrientation, usesPointer]);
 
   return { inputRef };
 }

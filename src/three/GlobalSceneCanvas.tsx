@@ -1567,19 +1567,30 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
 }
 
 type GlobalSceneCanvasProps = {
+  mobileGyroscopeEnabled?: boolean;
   productCupColor: ProductCupColorValue;
   productCupArtworkUrl?: string | null;
   productCupDecorationMethod?: ProductCupDecorationMethod;
   onReady?: () => void;
 };
 
-export function GlobalSceneCanvas({ productCupColor, productCupArtworkUrl = null, productCupDecorationMethod = "digital", onReady }: GlobalSceneCanvasProps) {
+export function GlobalSceneCanvas({
+  mobileGyroscopeEnabled = true,
+  productCupColor,
+  productCupArtworkUrl = null,
+  productCupDecorationMethod = "digital",
+  onReady,
+}: GlobalSceneCanvasProps) {
   const editor = useEditorStore();
   const runtime = useExperienceRuntime();
   const viewport = useViewportInfo();
   const invalidateRef = useRef<() => void>(() => undefined);
   const requestFrame = useCallback(() => invalidateRef.current(), []);
-  const { inputRef: motionInputRef } = useSceneMotionInput(viewport.breakpoint, requestFrame);
+  const { inputRef: motionInputRef } = useSceneMotionInput(
+    viewport.breakpoint,
+    mobileGyroscopeEnabled,
+    requestFrame,
+  );
   const dpr = breakpointDprRanges[viewport.breakpoint];
 
   return (

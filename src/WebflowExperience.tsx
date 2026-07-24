@@ -11,6 +11,7 @@ import { useWebflowEditorScrollProxy } from "./useWebflowEditorScrollProxy";
 
 type WebflowExperienceProps = {
   runtime: ExperienceRuntime;
+  mobileGyroscopeEnabled?: boolean;
   productColor?: ProductCupColorKey;
   showEditor?: boolean;
   onSceneReady?: () => void;
@@ -80,7 +81,13 @@ function getInitialPreviewSize(breakpoint: Breakpoint): PreviewSize {
   };
 }
 
-export function WebflowExperience({ runtime, productColor = "orange", showEditor = false, onSceneReady }: WebflowExperienceProps) {
+export function WebflowExperience({
+  runtime,
+  mobileGyroscopeEnabled = true,
+  productColor = "orange",
+  showEditor = false,
+  onSceneReady,
+}: WebflowExperienceProps) {
   const editor = useEditorStore();
   const configuredColor = useMemo(
     () => productCupColors.find((color) => color.key === productColor) ?? productCupColors[0],
@@ -253,6 +260,7 @@ export function WebflowExperience({ runtime, productColor = "orange", showEditor
   return (
     <>
       <GlobalSceneCanvas
+        mobileGyroscopeEnabled={mobileGyroscopeEnabled}
         productCupColor={productCupColor}
         productCupArtworkUrl={productCupArtworkUrl}
         productCupDecorationMethod={productCupDecorationMethod}
