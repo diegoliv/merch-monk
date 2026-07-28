@@ -222,16 +222,22 @@ The runtime listens for document clicks and recognizes these attributes:
 | Attribute | Value | Effect |
 | --- | --- | --- |
 | `data-cup-color` | A 6-digit hexadecimal color, such as `#ff4a09` | Recolors `product_cup` and applies `.is-active` to the control |
+| `data-cup-logo-color` | A 6-digit hexadecimal color, such as `#ffffff` | Defines the artwork color for `print` and `digital`; place it on the same element as `data-cup-color` |
 | `data-decoration-method` | `print`, `engraved`, or `digital` | Changes the artwork treatment and applies `.is-active` |
+| `data-decoration-position` | `front` or `back` | Interpolates a local 180-degree Y rotation over 0.3 seconds and remaps the cloned cylindrical body UV ring by ring, preserving each row's authored width so the seam stays continuous; the artwork bitmap remains unchanged; adds `.is-active` |
 | `data-cup-logo-add` | Public image URL | Applies the artwork to the cup, adds `.is-uploaded`, and sets `data-cup-logo-state="uploaded"` |
 
 Example:
 
 ```html
-<button data-cup-color="#ff4a09" class="is-active">Orange</button>
+<button data-cup-color="#ff4a09" data-cup-logo-color="#ffffff" class="is-active">Orange</button>
 <button data-decoration-method="digital" class="is-active">Digital</button>
+<button data-decoration-position="front" class="is-active">Front</button>
+<button data-decoration-position="back">Back</button>
 <button data-cup-logo-add="https://cdn.example.com/logo.png">Add logo</button>
 ```
+
+If `data-cup-logo-color` is absent or invalid, the logo defaults to white. The attribute is ignored while the decoration method is `engraved`, which keeps the existing dark engraved treatment; its selected value is used again after switching back to `print` or `digital`.
 
 No artwork texture is loaded or applied during page load. The artwork URL must allow CORS, and it is loaded only after a `[data-cup-logo-add]` control is clicked. The hook accepts the first artwork applied during that mount; it does not open a file picker or implement removal on its own.
 

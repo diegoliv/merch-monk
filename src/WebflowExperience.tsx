@@ -3,7 +3,13 @@ import { breakpointPreviewRanges, breakpointPreviewSizes, resolveBreakpointMode 
 import { GlobalSceneCanvas } from "./three/GlobalSceneCanvas";
 import { SceneEditor } from "./three/SceneEditor";
 import { editorStore, useEditorStore } from "./three/editorStore";
-import { productCupColors, type ProductCupColorKey, type ProductCupColorValue, type ProductCupDecorationMethod } from "./components/StorySections";
+import {
+  productCupColors,
+  type ProductCupColorKey,
+  type ProductCupColorValue,
+  type ProductCupDecorationMethod,
+  type ProductCupDecorationPosition,
+} from "./components/StorySections";
 import type { ExperienceRuntime } from "./experienceRuntime";
 import type { Breakpoint } from "./three/types";
 import { enableWebflowBreakpointPreview } from "./webflowBreakpointPreview";
@@ -36,7 +42,9 @@ const productCupDarkColors: Record<string, string> = {
   "#5ba3fc": "#1f63ad",
   "#111111": "#020202",
 };
+const defaultProductCupLogoColor = "#ffffff";
 const decorationMethods = new Set<ProductCupDecorationMethod>(["print", "engraved", "digital"]);
+const decorationPositions = new Set<ProductCupDecorationPosition>(["front", "back"]);
 
 function normalizeHexColor(value: string | null) {
   const color = value?.trim().toLowerCase();
@@ -100,8 +108,17 @@ export function WebflowExperience({
     const activeSwatch = document.querySelector<HTMLElement>("[data-cup-color].is-active");
     return resolveProductCupColor(activeSwatch?.dataset.cupColor ?? configuredColor.color, configuredColor);
   });
+  const [productCupLogoColor, setProductCupLogoColor] = useState(() => {
+    const activeSwatch = document.querySelector<HTMLElement>("[data-cup-color].is-active");
+    return normalizeHexColor(activeSwatch?.dataset.cupLogoColor ?? null) ?? defaultProductCupLogoColor;
+  });
   const [productCupArtworkUrl, setProductCupArtworkUrl] = useState<string | null>(null);
   const [productCupDecorationMethod, setProductCupDecorationMethod] = useState<ProductCupDecorationMethod>("digital");
+  const [productCupDecorationPosition, setProductCupDecorationPosition] = useState<ProductCupDecorationPosition>(() => {
+    const activePosition = document.querySelector<HTMLElement>("[data-decoration-position].is-active")
+      ?.dataset.decorationPosition as ProductCupDecorationPosition | undefined;
+    return activePosition && decorationPositions.has(activePosition) ? activePosition : "front";
+  });
   const hasUploadedArtworkRef = useRef(false);
   const pageElement = runtime.pageElement;
   const activeBreakpoint = resolveBreakpointMode(editor.breakpointMode, "desktop");
@@ -111,7 +128,9 @@ export function WebflowExperience({
   useEffect(() => {
     function handleProductCupClick(event: MouseEvent) {
       if (!(event.target instanceof Element)) return;
-      const control = event.target.closest<HTMLElement>("[data-cup-logo-add], [data-decoration-method], [data-cup-color]");
+      const control = event.target.closest<HTMLElement>(
+        "[data-cup-logo-add], [data-decoration-method], [data-decoration-position], [data-cup-color]",
+      );
       if (!control) return;
 
       const artworkUrl = control.dataset.cupLogoAdd?.trim();
@@ -133,9 +152,21 @@ export function WebflowExperience({
         return;
       }
 
+      const decorationPosition = control.dataset.decorationPosition as ProductCupDecorationPosition | undefined;
+      if (decorationPosition && decorationPositions.has(decorationPosition)) {
+        setProductCupDecorationPosition(decorationPosition);
+        document.querySelectorAll<HTMLElement>("[data-decoration-position]").forEach((option) => {
+          option.classList.toggle("is-active", option === control);
+        });
+        return;
+      }
+
       const color = normalizeHexColor(control.dataset.cupColor ?? null);
       if (!color) return;
       setProductCupColor(resolveProductCupColor(color, configuredColor));
+      setProductCupLogoColor(
+        normalizeHexColor(control.dataset.cupLogoColor ?? null) ?? defaultProductCupLogoColor,
+      );
       document.querySelectorAll<HTMLElement>("[data-cup-color]").forEach((option) => {
         option.classList.toggle("is-active", option === control);
       });
@@ -265,8 +296,10 @@ export function WebflowExperience({
       <GlobalSceneCanvas
         mobileGyroscopeEnabled={mobileGyroscopeEnabled}
         productCupColor={productCupColor}
+        productCupLogoColor={productCupLogoColor}
         productCupArtworkUrl={productCupArtworkUrl}
         productCupDecorationMethod={productCupDecorationMethod}
+        productCupDecorationPosition={productCupDecorationPosition}
         sceneTextureUrls={sceneTextureUrls}
         onReady={onSceneReady}
       />

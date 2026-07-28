@@ -32,7 +32,11 @@ import { selectTheatreObject, setTheatreObjectValue } from "./theatreStudio";
 import { useSceneProgress } from "./useSceneProgress";
 import { useViewportInfo } from "./useViewportInfo";
 import { useSceneMotionInput, type SceneMotionInput } from "./useSceneMotionInput";
-import type { ProductCupColorValue, ProductCupDecorationMethod } from "../components/StorySections";
+import type {
+  ProductCupColorValue,
+  ProductCupDecorationMethod,
+  ProductCupDecorationPosition,
+} from "../components/StorySections";
 import { useExperienceRuntime } from "../experienceRuntime";
 import { configureSceneRenderer, tuneMaterial } from "./sceneAppearance";
 import {
@@ -48,6 +52,10 @@ import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, Bo
 
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
 const environmentPath = resolveSceneEnvironmentUrl(modelPath);
+const productCupDecorationAxis = new THREE.Vector3(0, 1, 0);
+const productCupDecorationRotationDuration = 0.3;
+const productCupDecorationRotationEpsilon = 0.0001;
+
 const boxTextureTargets = [
   { nodeName: "box", materialName: null, fallbackMaterialIndex: null, recursive: false, overlay: false, textureKey: "boxBody" },
   {
@@ -182,11 +190,13 @@ function cloneNode(
   node: THREE.Object3D,
   centerPivot = false,
   backgroundChildId?: BackgroundChildObjectId | null,
+  cloneGeometry = false,
 ) {
   const cloned = cloneSkeleton(node);
   cloned.traverse((child) => {
     if ("material" in child) {
       const mesh = child as THREE.Mesh;
+      if (cloneGeometry && mesh.geometry) mesh.geometry = mesh.geometry.clone();
       if (Array.isArray(mesh.material)) {
         mesh.material = mesh.material.map((material) => {
           const clonedMaterial = material.clone();
@@ -431,6 +441,94 @@ function isProductCupMainMaterial(name: string) {
   return (name.includes("orange") && !name.includes("dark")) || name.includes("cup.uv");
 }
 
+type ProductCupUvState = {
+  uv: THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+  original: Float32Array;
+  back: Float32Array;
+};
+
+function createProductCupUvStates(object: THREE.Object3D) {
+  const states: ProductCupUvState[] = [];
+  object.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    const hasMainMaterial = materials.some((material) => (
+      isProductCupMainMaterial(material.name.toLowerCase().replace(/[_\s]/g, "."))
+    ));
+    if (!hasMainMaterial) return;
+
+    const position = child.geometry.getAttribute("position");
+    const normal = child.geometry.getAttribute("normal");
+    const uv = child.geometry.getAttribute("uv");
+    if (!position || !normal || !uv || position.count !== uv.count || normal.count !== uv.count) return;
+
+    const original = new Float32Array(uv.count * 2);
+    const cylindricalBodyRings = new Map<number, number[]>();
+    for (let index = 0; index < uv.count; index += 1) {
+      const u = uv.getX(index);
+      original[index * 2] = u;
+      original[index * 2 + 1] = uv.getY(index);
+
+      const x = position.getX(index);
+      const y = position.getY(index);
+      const z = position.getZ(index);
+      const radial = Math.hypot(x, z);
+      const radialNormal = Math.hypot(normal.getX(index), normal.getZ(index));
+      const isBodySide = (
+        u > 0.001 &&
+        radial > 0.55 && radial < 0.85 &&
+        Math.abs(y) < 1.4 &&
+        Math.abs(normal.getY(index)) < 0.35 &&
+        radialNormal > 0.75
+      );
+      if (!isBodySide) continue;
+      const ringKey = Math.round(y * 10_000);
+      const ring = cylindricalBodyRings.get(ringKey) ?? [];
+      ring.push(index);
+      cylindricalBodyRings.set(ringKey, ring);
+    }
+
+    const rings = [...cylindricalBodyRings.values()];
+    const largestRingSize = Math.max(0, ...rings.map((ring) => ring.length));
+    const minimumRingSize = Math.max(3, Math.floor(largestRingSize * 0.75));
+    const back = original.slice();
+    let mappedRingCount = 0;
+
+    rings.forEach((ring) => {
+      if (ring.length < minimumRingSize) return;
+      const ringUs = ring.map((index) => original[index * 2]);
+      const wrapMinU = Math.min(...ringUs);
+      const wrapMaxU = Math.max(...ringUs);
+      const wrapSpanU = wrapMaxU - wrapMinU;
+      if (wrapSpanU <= productCupDecorationRotationEpsilon) return;
+
+      const halfTurnOffset = wrapSpanU * 0.5;
+      ring.forEach((index) => {
+        const localU = (original[index * 2] - halfTurnOffset - wrapMinU) % wrapSpanU;
+        back[index * 2] = wrapMinU + (localU < 0 ? localU + wrapSpanU : localU);
+      });
+      mappedRingCount += 1;
+    });
+
+    if (mappedRingCount === 0) return;
+    states.push({ uv, original, back });
+  });
+  return states;
+}
+
+function applyProductCupDecorationUv(
+  states: ProductCupUvState[],
+  decorationPosition: ProductCupDecorationPosition,
+) {
+  states.forEach(({ uv, original, back }) => {
+    const source = decorationPosition === "back" ? back : original;
+    for (let index = 0; index < uv.count; index += 1) {
+      uv.setXY(index, source[index * 2], source[index * 2 + 1]);
+    }
+    uv.needsUpdate = true;
+  });
+}
+
 function applyProductCupMaterial(
   object: THREE.Object3D,
   productCupColor: ProductCupColorValue,
@@ -483,6 +581,7 @@ function createTintedArtworkCanvas(image: HTMLImageElement, color: string) {
 function createProductCupArtworkTextures(
   image: HTMLImageElement,
   productCupColor: ProductCupColorValue,
+  productCupLogoColor: string,
   decorationMethod: ProductCupDecorationMethod,
 ) {
   const colorCanvas = document.createElement("canvas");
@@ -491,7 +590,7 @@ function createProductCupArtworkTextures(
   const colorContext = colorCanvas.getContext("2d");
   const artworkCanvas = createTintedArtworkCanvas(
     image,
-    decorationMethod === "engraved" ? productCupColor.darkColor : "#ffffff",
+    decorationMethod === "engraved" ? productCupColor.darkColor : productCupLogoColor,
   );
   if (!colorContext || !artworkCanvas) return null;
 
@@ -699,8 +798,10 @@ type MerchObjectProps = {
   hoverFollow: number;
   hoverRange: number;
   productCupColor: ProductCupColorValue;
+  productCupLogoColor: string;
   productCupArtworkUrl: string | null;
   productCupDecorationMethod: ProductCupDecorationMethod;
+  productCupDecorationPosition: ProductCupDecorationPosition;
   sceneTextureUrls: SceneTextureUrls;
   setSelectedRef: (id: ObjectId, instance: THREE.Object3D | null) => void;
   activeBreakpoint: Breakpoint;
@@ -709,7 +810,7 @@ type MerchObjectProps = {
   entranceStartRef: MutableRefObject<number | null>;
 };
 
-function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewportRef, backgroundCollectionRef, motionInputRef, interactionRegistry, interactionStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, sceneTextureUrls, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
+function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewportRef, backgroundCollectionRef, motionInputRef, interactionRegistry, interactionStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupLogoColor, productCupArtworkUrl, productCupDecorationMethod, productCupDecorationPosition, sceneTextureUrls, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
   const { scene, animations } = useGLTF(modelPath);
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
@@ -727,6 +828,12 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
   const baseQuaternionRef = useRef(new THREE.Quaternion());
   const globalTiltEulerRef = useRef(new THREE.Euler());
   const globalTiltQuaternionRef = useRef(new THREE.Quaternion());
+  const productCupDecorationQuaternionRef = useRef(new THREE.Quaternion());
+  const initialProductCupDecorationRotation = productCupDecorationPosition === "back" ? Math.PI : 0;
+  const productCupDecorationRotationRef = useRef(initialProductCupDecorationRotation);
+  const productCupDecorationRotationStartRef = useRef(initialProductCupDecorationRotation);
+  const productCupDecorationRotationTargetRef = useRef(initialProductCupDecorationRotation);
+  const productCupDecorationRotationElapsedRef = useRef(productCupDecorationRotationDuration);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const boxActionRef = useRef<THREE.AnimationAction | null>(null);
   const centerRef = useRef(new THREE.Vector3());
@@ -743,8 +850,19 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
 
   const object = useMemo(() => {
     const node = scene.getObjectByName(modelNodeNames[id] ?? id);
-    return node ? cloneNode(node, id === "box", isBackgroundObjectId(id) ? backgroundChildByParent[id] ?? null : undefined) : null;
+    return node
+      ? cloneNode(
+        node,
+        id === "box",
+        isBackgroundObjectId(id) ? backgroundChildByParent[id] ?? null : undefined,
+        id === "product_cup",
+      )
+      : null;
   }, [id, scene]);
+  const productCupUvStates = useMemo(
+    () => (id === "product_cup" && object ? createProductCupUvStates(object) : []),
+    [id, object],
+  );
   const boxAnimationClip = useMemo(() => (id === "box" && object ? createBoxAnimationClip(object, animations) : null), [animations, id, object]);
   const boxChildRestTransforms = useMemo(() => {
     if (id !== "box" || !object) return {};
@@ -943,7 +1061,12 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     image.decoding = "async";
     image.onload = () => {
       if (cancelled) return;
-      const textures = createProductCupArtworkTextures(image, productCupColor, productCupDecorationMethod);
+      const textures = createProductCupArtworkTextures(
+        image,
+        productCupColor,
+        productCupLogoColor,
+        productCupDecorationMethod,
+      );
       if (!textures) return;
       colorTexture = textures.colorTexture;
       bumpTexture = textures.bumpTexture;
@@ -973,7 +1096,13 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       colorTexture?.dispose();
       bumpTexture?.dispose();
     };
-  }, [id, invalidate, object, productCupArtworkUrl, productCupColor, productCupDecorationMethod]);
+  }, [id, invalidate, object, productCupArtworkUrl, productCupColor, productCupDecorationMethod, productCupLogoColor]);
+
+  useEffect(() => {
+    if (id !== "product_cup") return;
+    applyProductCupDecorationUv(productCupUvStates, productCupDecorationPosition);
+    invalidate();
+  }, [id, invalidate, productCupDecorationPosition, productCupUvStates]);
 
   function applyState(tilt = tiltRef.current, entranceScale = 1) {
     const group = groupRef.current;
@@ -1056,6 +1185,13 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     globalTiltEulerRef.current.set(tilt.x, tilt.y, 0, "XYZ");
     globalTiltQuaternionRef.current.setFromEuler(globalTiltEulerRef.current);
     group.quaternion.copy(baseQuaternionRef.current);
+    if (id === "product_cup" && Math.abs(productCupDecorationRotationRef.current) > productCupDecorationRotationEpsilon) {
+      productCupDecorationQuaternionRef.current.setFromAxisAngle(
+        productCupDecorationAxis,
+        productCupDecorationRotationRef.current,
+      );
+      group.quaternion.multiply(productCupDecorationQuaternionRef.current);
+    }
     if (!isBackground) group.quaternion.premultiply(globalTiltQuaternionRef.current);
     if (collectionFollow > 0.0001) {
       group.quaternion.premultiply(collectionFollowQuaternionRef.current);
@@ -1107,6 +1243,14 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
   }
 
   useEffect(() => {
+    if (id !== "product_cup") return;
+    productCupDecorationRotationStartRef.current = productCupDecorationRotationRef.current;
+    productCupDecorationRotationTargetRef.current = productCupDecorationPosition === "back" ? Math.PI : 0;
+    productCupDecorationRotationElapsedRef.current = 0;
+    invalidate();
+  }, [id, invalidate, productCupDecorationPosition]);
+
+  useEffect(() => {
     if (id === "box" && isBoxChildObjectId(selectedObjectId) && object) {
       setSelectedRef(selectedObjectId, object.getObjectByName(selectedObjectId) ?? null);
       return;
@@ -1150,7 +1294,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     };
   }, [boxAnimationClip, object]);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const state = appliedRef.current[id];
     if (!state) return;
     const motionInput = motionInputRef.current;
@@ -1160,6 +1304,29 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       ? THREE.MathUtils.clamp(entranceElapsed / entranceDuration, 0, 1)
       : 1;
     const entranceScale = 1 - Math.pow(1 - entranceProgress, 3);
+    let decorationRotationAnimating = false;
+    if (id === "product_cup") {
+      const rotationStart = productCupDecorationRotationStartRef.current;
+      const rotationTarget = productCupDecorationRotationTargetRef.current;
+      if (Math.abs(rotationTarget - productCupDecorationRotationRef.current) > productCupDecorationRotationEpsilon) {
+        productCupDecorationRotationElapsedRef.current += delta;
+        const rotationProgress = THREE.MathUtils.clamp(
+          productCupDecorationRotationElapsedRef.current / productCupDecorationRotationDuration,
+          0,
+          1,
+        );
+        const easedRotationProgress = rotationProgress * rotationProgress * (3 - 2 * rotationProgress);
+        productCupDecorationRotationRef.current = THREE.MathUtils.lerp(
+          rotationStart,
+          rotationTarget,
+          easedRotationProgress,
+        );
+        decorationRotationAnimating = rotationProgress < 1;
+      } else {
+        productCupDecorationRotationRef.current = rotationTarget;
+      }
+
+    }
     if (id === "box" && mixerRef.current && boxActionRef.current && boxAnimationClip) {
       const progress = THREE.MathUtils.clamp(theatreValuesRef.current.box.boxAnimationProgress ?? 0, 0, 1);
       if (!Number.isFinite(lastAnimationProgressRef.current) || Math.abs(lastAnimationProgressRef.current - progress) > 0.0001) {
@@ -1175,7 +1342,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       applyState(tiltRef.current, entranceScale);
       const entranceAnimating = entranceEnabled && entranceStart !== null && entranceProgress < 1;
       const tiltAnimating = tiltRef.current.lengthSq() > 0.0000001;
-      if (entranceAnimating || tiltAnimating) invalidate();
+      if (entranceAnimating || tiltAnimating || decorationRotationAnimating) invalidate();
       return;
     }
 
@@ -1226,7 +1393,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     applyState(tiltRef.current, entranceScale);
     const entranceAnimating = entranceEnabled && entranceStart !== null && entranceProgress < 1;
     const tiltAnimating = hoverFollow > 0 && tiltRef.current.distanceToSquared(targetTiltRef.current) > 0.0000001;
-    if (entranceAnimating || tiltAnimating) invalidate();
+    if (entranceAnimating || tiltAnimating || decorationRotationAnimating) invalidate();
   });
 
   if (!object) return null;
@@ -1276,8 +1443,10 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
 
 type SceneContentProps = {
   productCupColor: ProductCupColorValue;
+  productCupLogoColor?: string;
   productCupArtworkUrl?: string | null;
   productCupDecorationMethod?: ProductCupDecorationMethod;
+  productCupDecorationPosition?: ProductCupDecorationPosition;
   sceneTextureUrls: SceneTextureUrls;
   motionInputRef: MutableRefObject<SceneMotionInput>;
   onReady?: () => void;
@@ -1325,7 +1494,7 @@ function SceneReadinessController({ entranceStartRef, onReady }: {
   return null;
 }
 
-function SceneContent({ productCupColor, productCupArtworkUrl = null, productCupDecorationMethod = "digital", sceneTextureUrls, motionInputRef, onReady, viewport }: SceneContentProps) {
+function SceneContent({ productCupColor, productCupLogoColor = "#ffffff", productCupArtworkUrl = null, productCupDecorationMethod = "digital", productCupDecorationPosition = "front", sceneTextureUrls, motionInputRef, onReady, viewport }: SceneContentProps) {
   const invalidate = useThree((state) => state.invalidate);
   const performanceDebug = getPerformanceDebug();
   if (performanceDebug) performanceDebug.sceneRenders += 1;
@@ -1533,8 +1702,10 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
         hoverFollow={editor.hoverFollow}
         hoverRange={editor.hoverRange}
         productCupColor={productCupColor}
+        productCupLogoColor={productCupLogoColor}
         productCupArtworkUrl={productCupArtworkUrl}
         productCupDecorationMethod={productCupDecorationMethod}
+        productCupDecorationPosition={productCupDecorationPosition}
         sceneTextureUrls={sceneTextureUrls}
         setSelectedRef={setSelectedRef}
         activeBreakpoint={activeBreakpoint}
@@ -1588,8 +1759,10 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
 type GlobalSceneCanvasProps = {
   mobileGyroscopeEnabled?: boolean;
   productCupColor: ProductCupColorValue;
+  productCupLogoColor?: string;
   productCupArtworkUrl?: string | null;
   productCupDecorationMethod?: ProductCupDecorationMethod;
+  productCupDecorationPosition?: ProductCupDecorationPosition;
   sceneTextureUrls?: SceneTextureUrls;
   onReady?: () => void;
 };
@@ -1597,8 +1770,10 @@ type GlobalSceneCanvasProps = {
 export function GlobalSceneCanvas({
   mobileGyroscopeEnabled = true,
   productCupColor,
+  productCupLogoColor = "#ffffff",
   productCupArtworkUrl = null,
   productCupDecorationMethod = "digital",
+  productCupDecorationPosition = "front",
   sceneTextureUrls = defaultSceneTextureUrls,
   onReady,
 }: GlobalSceneCanvasProps) {
@@ -1631,8 +1806,10 @@ export function GlobalSceneCanvas({
           <Suspense fallback={null}>
             <SceneContent
               productCupColor={productCupColor}
+              productCupLogoColor={productCupLogoColor}
               productCupArtworkUrl={productCupArtworkUrl}
               productCupDecorationMethod={productCupDecorationMethod}
+              productCupDecorationPosition={productCupDecorationPosition}
               sceneTextureUrls={sceneTextureUrls}
               motionInputRef={motionInputRef}
               onReady={onReady}

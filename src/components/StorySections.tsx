@@ -19,6 +19,7 @@ export type ProductCupColor = ProductCupColorValue & {
 };
 
 export type ProductCupDecorationMethod = "print" | "engraved" | "digital";
+export type ProductCupDecorationPosition = "front" | "back";
 
 export const productCupColors: ProductCupColor[] = [
   { key: "orange", label: "Orange", color: "#ff4a09", darkColor: "#9f3000" },
