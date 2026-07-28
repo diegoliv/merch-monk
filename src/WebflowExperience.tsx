@@ -8,11 +8,13 @@ import type { ExperienceRuntime } from "./experienceRuntime";
 import type { Breakpoint } from "./three/types";
 import { enableWebflowBreakpointPreview } from "./webflowBreakpointPreview";
 import { useWebflowEditorScrollProxy } from "./useWebflowEditorScrollProxy";
+import type { SceneTextureUrls } from "./three/sceneTextureUrls";
 
 type WebflowExperienceProps = {
   runtime: ExperienceRuntime;
   mobileGyroscopeEnabled?: boolean;
   productColor?: ProductCupColorKey;
+  sceneTextureUrls: SceneTextureUrls;
   showEditor?: boolean;
   onSceneReady?: () => void;
 };
@@ -85,6 +87,7 @@ export function WebflowExperience({
   runtime,
   mobileGyroscopeEnabled = true,
   productColor = "orange",
+  sceneTextureUrls,
   showEditor = false,
   onSceneReady,
 }: WebflowExperienceProps) {
@@ -264,6 +267,7 @@ export function WebflowExperience({
         productCupColor={productCupColor}
         productCupArtworkUrl={productCupArtworkUrl}
         productCupDecorationMethod={productCupDecorationMethod}
+        sceneTextureUrls={sceneTextureUrls}
         onReady={onSceneReady}
       />
       {isPreviewingBreakpoint ? (

@@ -43,21 +43,20 @@ import {
   type SceneInteractionState,
 } from "./SceneInteractionController";
 import { resolveSceneEnvironmentUrl, SceneEnvironment } from "./SceneEnvironment";
+import { defaultSceneTextureUrls, type SceneTextureUrls } from "./sceneTextureUrls";
 import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, BoxChildObjectId, Breakpoint, ObjectId, Vec3, ViewportInfo } from "./types";
 
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
 const environmentPath = resolveSceneEnvironmentUrl(modelPath);
-const crewneckLogoPath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5527787af01c167ce42d3c_f488968c6e31020e99fcf5deeeb44ad6_crewneck-logo.avif";
-const boxTexturePath = "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a5a88f85ff267f9a82727a8_box_body.avif";
 const boxTextureTargets = [
-  { nodeName: "box", materialName: null, fallbackMaterialIndex: null, recursive: false, overlay: false, path: boxTexturePath },
+  { nodeName: "box", materialName: null, fallbackMaterialIndex: null, recursive: false, overlay: false, textureKey: "boxBody" },
   {
     nodeName: "cup_box",
     materialName: "cup_uv",
     fallbackMaterialIndex: 0,
     recursive: true,
     overlay: true,
-    path: "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a613ce5aa236d5e3064fef2_bottle-logo.avif",
+    textureKey: "boxBottleLogo",
   },
   {
     nodeName: "notebook_box",
@@ -65,9 +64,16 @@ const boxTextureTargets = [
     fallbackMaterialIndex: 0,
     overlay: true,
     recursive: true,
-    path: "https://cdn.prod.website-files.com/69fb6de67bc0fb48b4ab0147/6a613ce50330e513548c5356_notebook-logo.avif",
+    textureKey: "boxNotebookLogo",
   },
-] as const;
+] as const satisfies ReadonlyArray<{
+  nodeName: string;
+  materialName: string | null;
+  fallbackMaterialIndex: number | null;
+  recursive: boolean;
+  overlay: boolean;
+  textureKey: keyof SceneTextureUrls;
+}>;
 const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones", product_cup: "cup" };
 const boxAnimationNames = new Set(["box_open"]);
 const entranceObjectIds: ObjectId[] = renderObjectIds.filter((id) => id !== "box" && id !== "product_cup");
@@ -695,6 +701,7 @@ type MerchObjectProps = {
   productCupColor: ProductCupColorValue;
   productCupArtworkUrl: string | null;
   productCupDecorationMethod: ProductCupDecorationMethod;
+  sceneTextureUrls: SceneTextureUrls;
   setSelectedRef: (id: ObjectId, instance: THREE.Object3D | null) => void;
   activeBreakpoint: Breakpoint;
   entranceEnabled: boolean;
@@ -702,7 +709,7 @@ type MerchObjectProps = {
   entranceStartRef: MutableRefObject<number | null>;
 };
 
-function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewportRef, backgroundCollectionRef, motionInputRef, interactionRegistry, interactionStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
+function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewportRef, backgroundCollectionRef, motionInputRef, interactionRegistry, interactionStateRef, lockMotion, selectedObjectId, editorEnabled, hoverTiltX, hoverTiltY, hoverFollow, hoverRange, productCupColor, productCupArtworkUrl, productCupDecorationMethod, sceneTextureUrls, setSelectedRef, activeBreakpoint, entranceEnabled, entranceIndex, entranceStartRef }: MerchObjectProps) {
   const { scene, animations } = useGLTF(modelPath);
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
@@ -817,6 +824,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
   useEffect(() => {
     if (id !== "crewneck" || !object) return;
 
+    const crewneckLogoPath = sceneTextureUrls.crewneckLogo;
     let cancelled = false;
     const image = new Image();
     image.crossOrigin = "anonymous";
@@ -854,7 +862,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       crewneckLogoMaterialsRef.current = [];
       lastShowLogoRef.current = null;
     };
-  }, [id, invalidate, materials, object, theatreValuesRef]);
+  }, [id, invalidate, materials, object, sceneTextureUrls.crewneckLogo, theatreValuesRef]);
   useEffect(() => {
     if (id !== "box" || !object) return;
 
@@ -864,8 +872,9 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin("anonymous");
     boxTextureTargets.forEach((target) => {
+      const texturePath = sceneTextureUrls[target.textureKey];
       loader.load(
-        target.path,
+        texturePath,
         (loadedTexture) => {
           if (cancelled) {
             loadedTexture.dispose();
@@ -894,7 +903,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
         },
         undefined,
         () => {
-          if (!cancelled) console.warn("[Merch Monk] Could not load box texture: " + target.path);
+          if (!cancelled) console.warn("[Merch Monk] Could not load box texture: " + texturePath);
         },
       );
     });
@@ -909,7 +918,15 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       });
       textures.forEach((texture) => texture.dispose());
     };
-  }, [gl, id, invalidate, object]);
+  }, [
+    gl,
+    id,
+    invalidate,
+    object,
+    sceneTextureUrls.boxBody,
+    sceneTextureUrls.boxBottleLogo,
+    sceneTextureUrls.boxNotebookLogo,
+  ]);
   useEffect(() => {
     if (id !== "product_cup" || !object) return;
 
@@ -1261,6 +1278,7 @@ type SceneContentProps = {
   productCupColor: ProductCupColorValue;
   productCupArtworkUrl?: string | null;
   productCupDecorationMethod?: ProductCupDecorationMethod;
+  sceneTextureUrls: SceneTextureUrls;
   motionInputRef: MutableRefObject<SceneMotionInput>;
   onReady?: () => void;
   viewport: ViewportInfo;
@@ -1307,7 +1325,7 @@ function SceneReadinessController({ entranceStartRef, onReady }: {
   return null;
 }
 
-function SceneContent({ productCupColor, productCupArtworkUrl = null, productCupDecorationMethod = "digital", motionInputRef, onReady, viewport }: SceneContentProps) {
+function SceneContent({ productCupColor, productCupArtworkUrl = null, productCupDecorationMethod = "digital", sceneTextureUrls, motionInputRef, onReady, viewport }: SceneContentProps) {
   const invalidate = useThree((state) => state.invalidate);
   const performanceDebug = getPerformanceDebug();
   if (performanceDebug) performanceDebug.sceneRenders += 1;
@@ -1517,6 +1535,7 @@ function SceneContent({ productCupColor, productCupArtworkUrl = null, productCup
         productCupColor={productCupColor}
         productCupArtworkUrl={productCupArtworkUrl}
         productCupDecorationMethod={productCupDecorationMethod}
+        sceneTextureUrls={sceneTextureUrls}
         setSelectedRef={setSelectedRef}
         activeBreakpoint={activeBreakpoint}
         entranceEnabled={entranceEnabled && entranceObjectIds.includes(id)}
@@ -1571,6 +1590,7 @@ type GlobalSceneCanvasProps = {
   productCupColor: ProductCupColorValue;
   productCupArtworkUrl?: string | null;
   productCupDecorationMethod?: ProductCupDecorationMethod;
+  sceneTextureUrls?: SceneTextureUrls;
   onReady?: () => void;
 };
 
@@ -1579,6 +1599,7 @@ export function GlobalSceneCanvas({
   productCupColor,
   productCupArtworkUrl = null,
   productCupDecorationMethod = "digital",
+  sceneTextureUrls = defaultSceneTextureUrls,
   onReady,
 }: GlobalSceneCanvasProps) {
   const editor = useEditorStore();
@@ -1612,6 +1633,7 @@ export function GlobalSceneCanvas({
               productCupColor={productCupColor}
               productCupArtworkUrl={productCupArtworkUrl}
               productCupDecorationMethod={productCupDecorationMethod}
+              sceneTextureUrls={sceneTextureUrls}
               motionInputRef={motionInputRef}
               onReady={onReady}
               viewport={viewport}

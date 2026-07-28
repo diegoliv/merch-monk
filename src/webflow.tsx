@@ -6,6 +6,7 @@ import { getScrollRuntime } from "./three/scrollRuntime";
 import "./webflow.css";
 import type { ProductCupColorKey } from "./components/StorySections";
 import type { __UNSTABLE_Project_OnDiskState } from "@theatre/core";
+import { resolveSceneTextureUrls } from "./three/sceneTextureUrls";
 
 export type MerchMonkReadyDetail = {
   canvasElement: HTMLElement;
@@ -61,6 +62,7 @@ function mountWebflowExperience() {
 
   const canvasHost = canvasElement;
   canvasHost.classList.add("merch-monk-canvas-host");
+  const sceneTextureUrls = resolveSceneTextureUrls(canvasHost);
 
   const root = ReactDOM.createRoot(canvasHost);
   const runtime = {
@@ -98,6 +100,7 @@ function mountWebflowExperience() {
           runtime={runtime}
           mobileGyroscopeEnabled={config.mobileGyroscopeEnabled !== false}
           productColor={config.productColor}
+          sceneTextureUrls={sceneTextureUrls}
           showEditor={config.editor === true}
           onSceneReady={handleSceneReady}
         />
