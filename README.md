@@ -157,7 +157,7 @@ The external JSON is loaded before the production bundle is imported because the
 
 ### External scene textures
 
-Set these attributes on the element matched by `canvasSelector` (by default, `.canvas-layer_middle`). Each value must be a public image URL that allows CORS. The runtime reads the values once when it mounts; an omitted or empty attribute uses the current Webflow asset as a fallback.
+Set these attributes on the element matched by `canvasSelector` (by default, `.canvas-layer_middle`). Each non-empty value must be a public image URL that allows CORS. The runtime reads the values once when it mounts: an omitted attribute uses the current Webflow asset as a fallback, while an attribute that is present but empty disables that texture.
 
 | Attribute | 3D target |
 | --- | --- |

@@ -444,6 +444,7 @@ type ProductCupParts = {
   body: THREE.Object3D;
   top: THREE.Object3D;
   topRestQuaternion: THREE.Quaternion;
+  bodyRestQuaternion: THREE.Quaternion;
 };
 
 function getProductCupParts(object: THREE.Object3D): ProductCupParts | null {
@@ -454,6 +455,7 @@ function getProductCupParts(object: THREE.Object3D): ProductCupParts | null {
   return {
     body: object,
     top,
+    bodyRestQuaternion: object.quaternion.clone(),
     topRestQuaternion: top.quaternion.clone(),
   };
 }
@@ -875,6 +877,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     if (id !== "crewneck" || !object) return;
 
     const crewneckLogoPath = sceneTextureUrls.crewneckLogo;
+    if (!crewneckLogoPath) return;
     let cancelled = false;
     const image = new Image();
     image.crossOrigin = "anonymous";
@@ -923,6 +926,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     loader.setCrossOrigin("anonymous");
     boxTextureTargets.forEach((target) => {
       const texturePath = sceneTextureUrls[target.textureKey];
+      if (!texturePath) return;
       loader.load(
         texturePath,
         (loadedTexture) => {
@@ -1037,15 +1041,13 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     previousProductCupDecorationPositionRef.current = productCupDecorationPosition;
 
     productCupParts.top.quaternion.copy(productCupParts.topRestQuaternion);
-    if (previousPosition === null && productCupDecorationPosition === "front") return;
-
-    productCupParts.body.rotateY(Math.PI);
     if (productCupDecorationPosition === "back") {
       productCupParts.top.rotateY(Math.PI);
     }
-    productCupDecorationRotationRef.current = Math.PI;
-    productCupDecorationRotationStartRef.current = Math.PI;
-    productCupDecorationRotationTargetRef.current = 0;
+    if (previousPosition === null && productCupDecorationPosition === "front") return;
+
+    productCupDecorationRotationStartRef.current = productCupDecorationRotationRef.current;
+    productCupDecorationRotationTargetRef.current = productCupDecorationPosition === "back" ? Math.PI : 0;
     productCupDecorationRotationElapsedRef.current = 0;
     invalidate();
   }, [id, invalidate, productCupDecorationPosition, productCupParts]);
@@ -1131,12 +1133,14 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     globalTiltEulerRef.current.set(tilt.x, tilt.y, 0, "XYZ");
     globalTiltQuaternionRef.current.setFromEuler(globalTiltEulerRef.current);
     group.quaternion.copy(baseQuaternionRef.current);
-    if (id === "product_cup" && Math.abs(productCupDecorationRotationRef.current) > productCupDecorationRotationEpsilon) {
+    if (id === "product_cup" && productCupParts) {
       productCupDecorationQuaternionRef.current.setFromAxisAngle(
         productCupDecorationAxis,
         productCupDecorationRotationRef.current,
       );
-      group.quaternion.multiply(productCupDecorationQuaternionRef.current);
+      productCupParts.body.quaternion
+        .copy(productCupParts.bodyRestQuaternion)
+        .multiply(productCupDecorationQuaternionRef.current);
     }
     if (!isBackground) group.quaternion.premultiply(globalTiltQuaternionRef.current);
     if (collectionFollow > 0.0001) {
