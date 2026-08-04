@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrthographicCamera, TransformControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -53,6 +53,7 @@ import type { AppliedSceneState, BackgroundChildObjectId, BackgroundObjectId, Bo
 const modelPath = window.MerchMonkWebflow?.modelUrl ?? "/models/merch_monk_website.glb";
 const environmentPath = resolveSceneEnvironmentUrl(modelPath);
 const productCupDecorationAxis = new THREE.Vector3(0, 1, 0);
+const productCupTopNodeName = THREE.PropertyBinding.sanitizeNodeName("product_cup.top");
 const productCupDecorationRotationDuration = 0.3;
 const productCupDecorationRotationEpsilon = 0.0001;
 
@@ -82,7 +83,7 @@ const boxTextureTargets = [
   overlay: boolean;
   textureKey: keyof SceneTextureUrls;
 }>;
-const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones", product_cup: "cup" };
+const modelNodeNames: Partial<Record<ObjectId, string>> = { box: "box_bones" };
 const boxAnimationNames = new Set(["box_open"]);
 const entranceObjectIds: ObjectId[] = renderObjectIds.filter((id) => id !== "box" && id !== "product_cup");
 const entranceDuration = 0.55;
@@ -190,13 +191,11 @@ function cloneNode(
   node: THREE.Object3D,
   centerPivot = false,
   backgroundChildId?: BackgroundChildObjectId | null,
-  cloneGeometry = false,
 ) {
   const cloned = cloneSkeleton(node);
   cloned.traverse((child) => {
     if ("material" in child) {
       const mesh = child as THREE.Mesh;
-      if (cloneGeometry && mesh.geometry) mesh.geometry = mesh.geometry.clone();
       if (Array.isArray(mesh.material)) {
         mesh.material = mesh.material.map((material) => {
           const clonedMaterial = material.clone();
@@ -441,92 +440,22 @@ function isProductCupMainMaterial(name: string) {
   return (name.includes("orange") && !name.includes("dark")) || name.includes("cup.uv");
 }
 
-type ProductCupUvState = {
-  uv: THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
-  original: Float32Array;
-  back: Float32Array;
+type ProductCupParts = {
+  body: THREE.Object3D;
+  top: THREE.Object3D;
+  topRestQuaternion: THREE.Quaternion;
 };
 
-function createProductCupUvStates(object: THREE.Object3D) {
-  const states: ProductCupUvState[] = [];
-  object.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) return;
-    const materials = Array.isArray(child.material) ? child.material : [child.material];
-    const hasMainMaterial = materials.some((material) => (
-      isProductCupMainMaterial(material.name.toLowerCase().replace(/[_\s]/g, "."))
-    ));
-    if (!hasMainMaterial) return;
-
-    const position = child.geometry.getAttribute("position");
-    const normal = child.geometry.getAttribute("normal");
-    const uv = child.geometry.getAttribute("uv");
-    if (!position || !normal || !uv || position.count !== uv.count || normal.count !== uv.count) return;
-
-    const original = new Float32Array(uv.count * 2);
-    const cylindricalBodyRings = new Map<number, number[]>();
-    for (let index = 0; index < uv.count; index += 1) {
-      const u = uv.getX(index);
-      original[index * 2] = u;
-      original[index * 2 + 1] = uv.getY(index);
-
-      const x = position.getX(index);
-      const y = position.getY(index);
-      const z = position.getZ(index);
-      const radial = Math.hypot(x, z);
-      const radialNormal = Math.hypot(normal.getX(index), normal.getZ(index));
-      const isBodySide = (
-        u > 0.001 &&
-        radial > 0.55 && radial < 0.85 &&
-        Math.abs(y) < 1.4 &&
-        Math.abs(normal.getY(index)) < 0.35 &&
-        radialNormal > 0.75
-      );
-      if (!isBodySide) continue;
-      const ringKey = Math.round(y * 10_000);
-      const ring = cylindricalBodyRings.get(ringKey) ?? [];
-      ring.push(index);
-      cylindricalBodyRings.set(ringKey, ring);
-    }
-
-    const rings = [...cylindricalBodyRings.values()];
-    const largestRingSize = Math.max(0, ...rings.map((ring) => ring.length));
-    const minimumRingSize = Math.max(3, Math.floor(largestRingSize * 0.75));
-    const back = original.slice();
-    let mappedRingCount = 0;
-
-    rings.forEach((ring) => {
-      if (ring.length < minimumRingSize) return;
-      const ringUs = ring.map((index) => original[index * 2]);
-      const wrapMinU = Math.min(...ringUs);
-      const wrapMaxU = Math.max(...ringUs);
-      const wrapSpanU = wrapMaxU - wrapMinU;
-      if (wrapSpanU <= productCupDecorationRotationEpsilon) return;
-
-      const halfTurnOffset = wrapSpanU * 0.5;
-      ring.forEach((index) => {
-        const localU = (original[index * 2] - halfTurnOffset - wrapMinU) % wrapSpanU;
-        back[index * 2] = wrapMinU + (localU < 0 ? localU + wrapSpanU : localU);
-      });
-      mappedRingCount += 1;
-    });
-
-    if (mappedRingCount === 0) return;
-    states.push({ uv, original, back });
-  });
-  return states;
-}
-
-function applyProductCupDecorationUv(
-  states: ProductCupUvState[],
-  decorationPosition: ProductCupDecorationPosition,
-) {
-  states.forEach(({ uv, original, back }) => {
-    const source = decorationPosition === "back" ? back : original;
-    for (let index = 0; index < uv.count; index += 1) {
-      uv.setXY(index, source[index * 2], source[index * 2 + 1]);
-    }
-    uv.needsUpdate = true;
-  });
+function getProductCupParts(object: THREE.Object3D): ProductCupParts | null {
+  const top = object.children.find((child) => (
+    child.name === productCupTopNodeName || child.name === "product_cup.top"
+  )) ?? object.getObjectByName(productCupTopNodeName) ?? object.getObjectByName("product_cup.top");
+  if (!top) return null;
+  return {
+    body: object,
+    top,
+    topRestQuaternion: top.quaternion.clone(),
+  };
 }
 
 function applyProductCupMaterial(
@@ -536,10 +465,12 @@ function applyProductCupMaterial(
   colorTexture: THREE.CanvasTexture | null = null,
   bumpTexture: THREE.CanvasTexture | null = null,
 ) {
-  object.traverse((child) => {
+  const productCupBody = object.getObjectByName("product_cup") ?? object;
+  productCupBody.traverse((child) => {
     if (!("material" in child)) return;
     const mesh = child as THREE.Mesh;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const acceptsArtwork = child === productCupBody;
 
     materials.forEach((material) => {
       if (!material || !("color" in material)) return;
@@ -551,10 +482,12 @@ function applyProductCupMaterial(
         pbr.bumpMap = null;
         pbr.bumpScale = 0;
       } else if (isProductCupMainMaterial(name)) {
-        pbr.color.set(colorTexture ? "#ffffff" : productCupColor.color);
-        pbr.map = colorTexture;
-        pbr.bumpMap = bumpTexture;
-        pbr.bumpScale = bumpTexture ? -0.018 : 0;
+        const artworkTexture = acceptsArtwork ? colorTexture : null;
+        const artworkBump = acceptsArtwork ? bumpTexture : null;
+        pbr.color.set(artworkTexture ? "#ffffff" : productCupColor.color);
+        pbr.map = artworkTexture;
+        pbr.bumpMap = artworkBump;
+        pbr.bumpScale = artworkBump ? -0.018 : 0;
       }
       pbr.roughness = decorationMethod === "engraved" ? 0.78 : decorationMethod === "print" ? 0.72 : 0.62;
       pbr.metalness = Math.min(pbr.metalness ?? 0, 0.08);
@@ -829,11 +762,11 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
   const globalTiltEulerRef = useRef(new THREE.Euler());
   const globalTiltQuaternionRef = useRef(new THREE.Quaternion());
   const productCupDecorationQuaternionRef = useRef(new THREE.Quaternion());
-  const initialProductCupDecorationRotation = productCupDecorationPosition === "back" ? Math.PI : 0;
-  const productCupDecorationRotationRef = useRef(initialProductCupDecorationRotation);
-  const productCupDecorationRotationStartRef = useRef(initialProductCupDecorationRotation);
-  const productCupDecorationRotationTargetRef = useRef(initialProductCupDecorationRotation);
+  const productCupDecorationRotationRef = useRef(0);
+  const productCupDecorationRotationStartRef = useRef(0);
+  const productCupDecorationRotationTargetRef = useRef(0);
   const productCupDecorationRotationElapsedRef = useRef(productCupDecorationRotationDuration);
+  const previousProductCupDecorationPositionRef = useRef<ProductCupDecorationPosition | null>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const boxActionRef = useRef<THREE.AnimationAction | null>(null);
   const centerRef = useRef(new THREE.Vector3());
@@ -855,12 +788,11 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
         node,
         id === "box",
         isBackgroundObjectId(id) ? backgroundChildByParent[id] ?? null : undefined,
-        id === "product_cup",
       )
       : null;
   }, [id, scene]);
-  const productCupUvStates = useMemo(
-    () => (id === "product_cup" && object ? createProductCupUvStates(object) : []),
+  const productCupParts = useMemo(
+    () => (id === "product_cup" && object ? getProductCupParts(object) : null),
     [id, object],
   );
   const boxAnimationClip = useMemo(() => (id === "box" && object ? createBoxAnimationClip(object, animations) : null), [animations, id, object]);
@@ -1098,11 +1030,25 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     };
   }, [id, invalidate, object, productCupArtworkUrl, productCupColor, productCupDecorationMethod, productCupLogoColor]);
 
-  useEffect(() => {
-    if (id !== "product_cup") return;
-    applyProductCupDecorationUv(productCupUvStates, productCupDecorationPosition);
+  useLayoutEffect(() => {
+    if (id !== "product_cup" || !productCupParts) return;
+    const previousPosition = previousProductCupDecorationPositionRef.current;
+    if (previousPosition === productCupDecorationPosition) return;
+    previousProductCupDecorationPositionRef.current = productCupDecorationPosition;
+
+    productCupParts.top.quaternion.copy(productCupParts.topRestQuaternion);
+    if (previousPosition === null && productCupDecorationPosition === "front") return;
+
+    productCupParts.body.rotateY(Math.PI);
+    if (productCupDecorationPosition === "back") {
+      productCupParts.top.rotateY(Math.PI);
+    }
+    productCupDecorationRotationRef.current = Math.PI;
+    productCupDecorationRotationStartRef.current = Math.PI;
+    productCupDecorationRotationTargetRef.current = 0;
+    productCupDecorationRotationElapsedRef.current = 0;
     invalidate();
-  }, [id, invalidate, productCupDecorationPosition, productCupUvStates]);
+  }, [id, invalidate, productCupDecorationPosition, productCupParts]);
 
   function applyState(tilt = tiltRef.current, entranceScale = 1) {
     const group = groupRef.current;
@@ -1241,14 +1187,6 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       }
     }
   }
-
-  useEffect(() => {
-    if (id !== "product_cup") return;
-    productCupDecorationRotationStartRef.current = productCupDecorationRotationRef.current;
-    productCupDecorationRotationTargetRef.current = productCupDecorationPosition === "back" ? Math.PI : 0;
-    productCupDecorationRotationElapsedRef.current = 0;
-    invalidate();
-  }, [id, invalidate, productCupDecorationPosition]);
 
   useEffect(() => {
     if (id === "box" && isBoxChildObjectId(selectedObjectId) && object) {

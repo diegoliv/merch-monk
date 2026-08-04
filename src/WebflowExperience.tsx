@@ -39,7 +39,9 @@ const previewHeightRange = { minHeight: 360, maxHeight: 1800 };
 const productCupDarkColors: Record<string, string> = {
   "#ff4a09": "#9f3000",
   "#f5f3c9": "#c9c6a8",
+  "#f7f7f4": "#c9c6bd",
   "#5ba3fc": "#1f63ad",
+  "#47a3e8": "#176aa5",
   "#111111": "#020202",
 };
 const defaultProductCupLogoColor = "#ffffff";
