@@ -443,7 +443,6 @@ function isProductCupMainMaterial(name: string) {
 type ProductCupParts = {
   body: THREE.Object3D;
   top: THREE.Object3D;
-  topRestQuaternion: THREE.Quaternion;
   bodyRestQuaternion: THREE.Quaternion;
 };
 
@@ -452,27 +451,28 @@ function getProductCupParts(object: THREE.Object3D): ProductCupParts | null {
     child.name === productCupTopNodeName || child.name === "product_cup.top"
   )) ?? object.getObjectByName(productCupTopNodeName) ?? object.getObjectByName("product_cup.top");
   if (!top) return null;
+  object.updateMatrix();
+  top.applyMatrix4(object.matrix);
+  object.remove(top);
   return {
     body: object,
     top,
     bodyRestQuaternion: object.quaternion.clone(),
-    topRestQuaternion: top.quaternion.clone(),
   };
 }
 
 function applyProductCupMaterial(
-  object: THREE.Object3D,
+  productCupParts: ProductCupParts,
   productCupColor: ProductCupColorValue,
   decorationMethod: ProductCupDecorationMethod,
   colorTexture: THREE.CanvasTexture | null = null,
   bumpTexture: THREE.CanvasTexture | null = null,
 ) {
-  const productCupBody = object.getObjectByName("product_cup") ?? object;
-  productCupBody.traverse((child) => {
+  [productCupParts.body, productCupParts.top].forEach((part) => part.traverse((child) => {
     if (!("material" in child)) return;
     const mesh = child as THREE.Mesh;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    const acceptsArtwork = child === productCupBody;
+    const acceptsArtwork = child === productCupParts.body;
 
     materials.forEach((material) => {
       if (!material || !("color" in material)) return;
@@ -495,7 +495,7 @@ function applyProductCupMaterial(
       pbr.metalness = Math.min(pbr.metalness ?? 0, 0.08);
       material.needsUpdate = true;
     });
-  });
+  }));
 }
 
 function createTintedArtworkCanvas(image: HTMLImageElement, color: string) {
@@ -764,10 +764,11 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
   const globalTiltEulerRef = useRef(new THREE.Euler());
   const globalTiltQuaternionRef = useRef(new THREE.Quaternion());
   const productCupDecorationQuaternionRef = useRef(new THREE.Quaternion());
-  const productCupDecorationRotationRef = useRef(0);
-  const productCupDecorationRotationStartRef = useRef(0);
-  const productCupDecorationRotationTargetRef = useRef(0);
-  const productCupDecorationRotationElapsedRef = useRef(productCupDecorationRotationDuration);
+  const initialProductCupDecorationRotation = id === "product_cup" && productCupDecorationPosition === "back" ? Math.PI : 0;
+  const productCupDecorationRotationRef = useRef(initialProductCupDecorationRotation);
+  const productCupDecorationRotationStartRef = useRef(initialProductCupDecorationRotation);
+  const productCupDecorationRotationTargetRef = useRef(initialProductCupDecorationRotation);
+  const productCupDecorationRotationStartTimeRef = useRef<number | null>(null);
   const previousProductCupDecorationPositionRef = useRef<ProductCupDecorationPosition | null>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const boxActionRef = useRef<THREE.AnimationAction | null>(null);
@@ -844,7 +845,14 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     if (bounds.isEmpty()) return new THREE.Vector3();
     return motionObject.worldToLocal(bounds.getCenter(new THREE.Vector3()));
   }, [motionObject]);
-  const materials = useMemo(() => (object ? collectMaterials(object) : []), [object]);
+  const materials = useMemo(() => {
+    if (!object) return [];
+    if (!productCupParts) return collectMaterials(object);
+    return [
+      ...collectMaterials(productCupParts.body),
+      ...collectMaterials(productCupParts.top),
+    ];
+  }, [object, productCupParts]);
   const backgroundChildMaterials = useMemo(() => {
     if (!backgroundChildId || !object) return [];
     const child = object.getObjectByName(backgroundChildId);
@@ -982,12 +990,12 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     sceneTextureUrls.boxNotebookLogo,
   ]);
   useEffect(() => {
-    if (id !== "product_cup" || !object) return;
+    if (id !== "product_cup" || !productCupParts) return;
 
     let cancelled = false;
     let colorTexture: THREE.CanvasTexture | null = null;
     let bumpTexture: THREE.CanvasTexture | null = null;
-    applyProductCupMaterial(object, productCupColor, productCupDecorationMethod);
+    applyProductCupMaterial(productCupParts, productCupColor, productCupDecorationMethod);
     invalidate();
     if (!productCupArtworkUrl) return;
 
@@ -1006,7 +1014,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       if (!textures) return;
       colorTexture = textures.colorTexture;
       bumpTexture = textures.bumpTexture;
-      applyProductCupMaterial(object, productCupColor, productCupDecorationMethod, colorTexture, bumpTexture);
+      applyProductCupMaterial(productCupParts, productCupColor, productCupDecorationMethod, colorTexture, bumpTexture);
       invalidate();
     };
     image.onerror = () => {
@@ -1018,7 +1026,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       cancelled = true;
       image.onload = null;
       image.onerror = null;
-      object.traverse((child) => {
+      productCupParts.body.traverse((child) => {
         if (!("material" in child)) return;
         const mesh = child as THREE.Mesh;
         const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -1032,7 +1040,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       colorTexture?.dispose();
       bumpTexture?.dispose();
     };
-  }, [id, invalidate, object, productCupArtworkUrl, productCupColor, productCupDecorationMethod, productCupLogoColor]);
+  }, [id, invalidate, productCupArtworkUrl, productCupColor, productCupDecorationMethod, productCupLogoColor, productCupParts]);
 
   useLayoutEffect(() => {
     if (id !== "product_cup" || !productCupParts) return;
@@ -1040,15 +1048,24 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     if (previousPosition === productCupDecorationPosition) return;
     previousProductCupDecorationPositionRef.current = productCupDecorationPosition;
 
-    productCupParts.top.quaternion.copy(productCupParts.topRestQuaternion);
-    if (productCupDecorationPosition === "back") {
-      productCupParts.top.rotateY(Math.PI);
+    const targetRotation = productCupDecorationPosition === "back" ? Math.PI : 0;
+    productCupDecorationQuaternionRef.current.setFromAxisAngle(productCupDecorationAxis, targetRotation);
+    productCupParts.body.quaternion
+      .copy(productCupParts.bodyRestQuaternion)
+      .multiply(productCupDecorationQuaternionRef.current);
+
+    if (previousPosition === null) {
+      productCupDecorationRotationRef.current = targetRotation;
+      productCupDecorationRotationStartRef.current = targetRotation;
+      productCupDecorationRotationTargetRef.current = targetRotation;
+      productCupDecorationRotationStartTimeRef.current = null;
+      invalidate();
+      return;
     }
-    if (previousPosition === null && productCupDecorationPosition === "front") return;
 
     productCupDecorationRotationStartRef.current = productCupDecorationRotationRef.current;
-    productCupDecorationRotationTargetRef.current = productCupDecorationPosition === "back" ? Math.PI : 0;
-    productCupDecorationRotationElapsedRef.current = 0;
+    productCupDecorationRotationTargetRef.current = targetRotation;
+    productCupDecorationRotationStartTimeRef.current = performance.now();
     invalidate();
   }, [id, invalidate, productCupDecorationPosition, productCupParts]);
 
@@ -1133,14 +1150,12 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
     globalTiltEulerRef.current.set(tilt.x, tilt.y, 0, "XYZ");
     globalTiltQuaternionRef.current.setFromEuler(globalTiltEulerRef.current);
     group.quaternion.copy(baseQuaternionRef.current);
-    if (id === "product_cup" && productCupParts) {
+    if (id === "product_cup" && Math.abs(productCupDecorationRotationRef.current) > productCupDecorationRotationEpsilon) {
       productCupDecorationQuaternionRef.current.setFromAxisAngle(
         productCupDecorationAxis,
         productCupDecorationRotationRef.current,
       );
-      productCupParts.body.quaternion
-        .copy(productCupParts.bodyRestQuaternion)
-        .multiply(productCupDecorationQuaternionRef.current);
+      group.quaternion.multiply(productCupDecorationQuaternionRef.current);
     }
     if (!isBackground) group.quaternion.premultiply(globalTiltQuaternionRef.current);
     if (collectionFollow > 0.0001) {
@@ -1251,9 +1266,10 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       const rotationStart = productCupDecorationRotationStartRef.current;
       const rotationTarget = productCupDecorationRotationTargetRef.current;
       if (Math.abs(rotationTarget - productCupDecorationRotationRef.current) > productCupDecorationRotationEpsilon) {
-        productCupDecorationRotationElapsedRef.current += delta;
+        const rotationStartTime = productCupDecorationRotationStartTimeRef.current ?? performance.now();
+        productCupDecorationRotationStartTimeRef.current = rotationStartTime;
         const rotationProgress = THREE.MathUtils.clamp(
-          productCupDecorationRotationElapsedRef.current / productCupDecorationRotationDuration,
+          (performance.now() - rotationStartTime) / (productCupDecorationRotationDuration * 1000),
           0,
           1,
         );
@@ -1264,8 +1280,10 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
           easedRotationProgress,
         );
         decorationRotationAnimating = rotationProgress < 1;
+        if (!decorationRotationAnimating) productCupDecorationRotationStartTimeRef.current = null;
       } else {
         productCupDecorationRotationRef.current = rotationTarget;
+        productCupDecorationRotationStartTimeRef.current = null;
       }
 
     }
@@ -1342,6 +1360,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
 
   return (
     <group
+      name={id === "product_cup" ? "product_cup.null" : undefined}
       ref={(instance) => {
         groupRef.current = instance;
         if (selectedObjectId === id) setSelectedRef(id, instance);
@@ -1379,6 +1398,7 @@ function MerchObject({ id, appliedRef, theatreValuesRef, domPinsRef, activeViewp
       }}
     >
       <primitive object={object} />
+      {productCupParts ? <primitive object={productCupParts.top} /> : null}
     </group>
   );
 }
