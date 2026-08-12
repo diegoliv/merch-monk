@@ -1,8 +1,10 @@
-import { useEffect, useMemo, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { SceneMotionInput } from "./useSceneMotionInput";
 import type { ObjectId } from "./types";
+
+const scrollFrameTailMs = 180;
 
 type SceneInteractionTarget = {
   object: THREE.Object3D;
@@ -60,16 +62,43 @@ function isWorldVisible(object: THREE.Object3D) {
 
 export function DemandFrameEvents() {
   const invalidate = useThree((state) => state.invalidate);
+  const scrollActiveUntilRef = useRef(0);
+
+  useFrame(() => {
+    if (performance.now() < scrollActiveUntilRef.current) invalidate();
+  }, -125);
 
   useEffect(() => {
-    const requestFrame = () => invalidate();
-    document.addEventListener("scroll", requestFrame, { capture: true, passive: true });
-    window.addEventListener("resize", requestFrame, { passive: true });
-    window.addEventListener("orientationchange", requestFrame, { passive: true });
+    const scrollPumpQuery = window.matchMedia("(max-width: 767px), (hover: none) and (pointer: coarse)");
+    const visualViewport = window.visualViewport;
+
+    function requestFrame(keepRendering = false) {
+      if (keepRendering) scrollActiveUntilRef.current = performance.now() + scrollFrameTailMs;
+      invalidate();
+    }
+
+    function requestScrollFrame() {
+      requestFrame(scrollPumpQuery.matches || navigator.maxTouchPoints > 0);
+    }
+
+    function requestLayoutFrames() {
+      requestFrame(true);
+    }
+
+    document.addEventListener("scroll", requestScrollFrame, { capture: true, passive: true });
+    document.addEventListener("touchmove", requestScrollFrame, { capture: true, passive: true });
+    window.addEventListener("resize", requestLayoutFrames, { passive: true });
+    window.addEventListener("orientationchange", requestLayoutFrames, { passive: true });
+    visualViewport?.addEventListener("scroll", requestScrollFrame, { passive: true });
+    visualViewport?.addEventListener("resize", requestLayoutFrames, { passive: true });
+
     return () => {
-      document.removeEventListener("scroll", requestFrame, true);
-      window.removeEventListener("resize", requestFrame);
-      window.removeEventListener("orientationchange", requestFrame);
+      document.removeEventListener("scroll", requestScrollFrame, true);
+      document.removeEventListener("touchmove", requestScrollFrame, true);
+      window.removeEventListener("resize", requestLayoutFrames);
+      window.removeEventListener("orientationchange", requestLayoutFrames);
+      visualViewport?.removeEventListener("scroll", requestScrollFrame);
+      visualViewport?.removeEventListener("resize", requestLayoutFrames);
     };
   }, [invalidate]);
 

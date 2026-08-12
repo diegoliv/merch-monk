@@ -8,6 +8,8 @@ export type DomPinState = {
   element: HTMLElement;
   worldPosition: Vec3;
   active: boolean;
+  cssVisible: boolean;
+  nextVisibilityCheck: number;
 };
 
 export type DomPinMap = Partial<Record<ObjectId, DomPinState>>;
@@ -23,6 +25,7 @@ export function DomPinController({ root, breakpoint, viewport, pinsRef }: DomPin
   const gl = useThree((state) => state.gl);
   const invalidate = useThree((state) => state.invalidate);
   const rescanFrameRef = useRef(0);
+  const resolvedPinsRef = useRef<DomPinState[]>([]);
 
   useEffect(() => {
     let disposed = false;
@@ -51,10 +54,15 @@ export function DomPinController({ root, breakpoint, viewport, pinsRef }: DomPin
             element,
             worldPosition: [0, 0, 0],
             active: false,
+            cssVisible: true,
+            nextVisibilityCheck: 0,
           };
       });
 
       pinsRef.current = next;
+      resolvedPinsRef.current = Object.values(next).filter((pin): pin is DomPinState => pin !== undefined);
+      resizeObserver?.disconnect();
+      resolvedPinsRef.current.forEach((pin) => resizeObserver?.observe(pin.element));
       invalidate();
     }
 
@@ -66,6 +74,9 @@ export function DomPinController({ root, breakpoint, viewport, pinsRef }: DomPin
     const mutationObserver = typeof MutationObserver === "undefined"
       ? null
       : new MutationObserver(scheduleRescan);
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(() => invalidate());
 
     mutationObserver?.observe(observerTarget, {
       childList: true,
@@ -84,23 +95,30 @@ export function DomPinController({ root, breakpoint, viewport, pinsRef }: DomPin
       disposed = true;
       cancelAnimationFrame(rescanFrameRef.current);
       mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
+      resolvedPinsRef.current = [];
       pinsRef.current = {};
     };
   }, [breakpoint, gl.domElement, invalidate, pinsRef, root]);
 
   useFrame(() => {
+    const pins = resolvedPinsRef.current;
+    if (pins.length === 0) return;
+
     const canvasRect = gl.domElement.getBoundingClientRect();
     if (canvasRect.width <= 0 || canvasRect.height <= 0) return;
+    const now = performance.now();
 
-    pinnableObjectIds.forEach((id) => {
-      const pin = pinsRef.current[id];
-      if (!pin) return;
-
+    pins.forEach((pin) => {
       const rect = pin.element.getBoundingClientRect();
-      const style = window.getComputedStyle(pin.element);
+      if (now >= pin.nextVisibilityCheck) {
+        const style = window.getComputedStyle(pin.element);
+        pin.cssVisible = style.display !== "none" && style.visibility !== "hidden";
+        pin.nextVisibilityCheck = now + 120;
+      }
       const active = (
-        style.display !== "none" &&
-        style.visibility !== "hidden" &&
+        pin.element.isConnected &&
+        pin.cssVisible &&
         rect.width > 0 &&
         rect.height > 0
       );
