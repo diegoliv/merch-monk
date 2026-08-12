@@ -25,8 +25,33 @@ export const breakpointPreviewRanges: Record<Breakpoint, { minWidth: number; max
 export const breakpointDprRanges: Record<Breakpoint, [min: number, max: number]> = {
   desktop: [1, 1.5],
   tablet: [1, 1.25],
-  mobile: [1, 1],
+  mobile: [1, 2],
 };
+
+const mobileInitialDpr = 1.5;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function resolveBreakpointDprLimits(
+  breakpoint: Breakpoint,
+  deviceDpr = window.devicePixelRatio || 1,
+) {
+  const [min, configuredMax] = breakpointDprRanges[breakpoint];
+  return {
+    min,
+    max: clamp(deviceDpr, min, configuredMax),
+  };
+}
+
+export function resolveInitialBreakpointDpr(
+  breakpoint: Breakpoint,
+  deviceDpr = window.devicePixelRatio || 1,
+) {
+  const { min, max } = resolveBreakpointDprLimits(breakpoint, deviceDpr);
+  return breakpoint === "mobile" ? clamp(mobileInitialDpr, min, max) : max;
+}
 
 export function getBreakpoint(width: number): Breakpoint {
   if (width < 768) return "mobile";

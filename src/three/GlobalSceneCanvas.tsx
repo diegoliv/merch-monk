@@ -3,7 +3,12 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrthographicCamera, TransformControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
-import { breakpointDprRanges, resolveBreakpointMode } from "./breakpoints";
+import {
+  resolveBreakpointDprLimits,
+  resolveBreakpointMode,
+  resolveInitialBreakpointDpr,
+} from "./breakpoints";
+import { AdaptiveDprController } from "./AdaptiveDprController";
 import { BackgroundCollection } from "./BackgroundCollection";
 import { DomPinController, type DomPinMap } from "./DomPinController";
 import {
@@ -1742,6 +1747,7 @@ export function GlobalSceneCanvas({
   const editor = useEditorStore();
   const runtime = useExperienceRuntime();
   const viewport = useViewportInfo();
+  const [dpr, setDpr] = useState(() => resolveInitialBreakpointDpr(viewport.breakpoint));
   const invalidateRef = useRef<() => void>(() => undefined);
   const requestFrame = useCallback(() => invalidateRef.current(), []);
   const { inputRef: motionInputRef } = useSceneMotionInput(
@@ -1749,7 +1755,11 @@ export function GlobalSceneCanvas({
     mobileGyroscopeEnabled,
     requestFrame,
   );
-  const dpr = breakpointDprRanges[viewport.breakpoint];
+  const dprLimits = resolveBreakpointDprLimits(viewport.breakpoint);
+
+  useEffect(() => {
+    setDpr(resolveInitialBreakpointDpr(viewport.breakpoint));
+  }, [viewport.breakpoint]);
 
   return (
     <>
@@ -1763,6 +1773,13 @@ export function GlobalSceneCanvas({
             configureSceneRenderer(gl, scene);
           }}
         >
+          <AdaptiveDprController
+            dpr={dpr}
+            enabled={viewport.breakpoint === "mobile" && !editor.enabled}
+            minDpr={dprLimits.min}
+            maxDpr={dprLimits.max}
+            onChange={setDpr}
+          />
           <DemandFrameEvents />
           {performanceDebugEnabled ? <PerformanceProbe /> : null}
           <Suspense fallback={null}>
